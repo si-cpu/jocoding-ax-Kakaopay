@@ -1,0 +1,18 @@
+{
+  "name": "anchor-event-mapper",
+  "version": "0.1.0",
+  "description": "초보 투자자가 매수·매도 전 입력한 뉴스·공시·루머성 문장을 판단 근거로 사용할 수 있는지 검증하고 과거 주가증감을 설명하는 플러그인입니다.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "앵커 이벤트 매퍼",
+    "shortDescription": "매수·매도 전 비정형 주식 이벤트 입력을 판단 가능한 앵커 기준으로 분류합니다.",
+    "longDescription": "앵커 이벤트 매퍼는 초보 투자자가 매수·매도 결정을 내리기 전 입력한 뉴스 문장, 공시 문구, 루머, 우려, 전망을 공식 앵커 이벤트, 비확정 선행 신호, 분석 보류, 민감정보 포함으로 분석 불가로 구분하도록 돕습니다. 공식 앵커가 확인되는 경우 최근 유사 사례의 3·5·10영업일 주가증감을 투자 권유 없이 판단 과정 참고값으로 설명합니다.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "회사명과 비정형 이벤트 문장을 입력하면, 매수·매도 전 판단 근거로 쓸 수 있는 공식 앵커 이벤트인지 검증하고 설명해줘."
+  }
+}
