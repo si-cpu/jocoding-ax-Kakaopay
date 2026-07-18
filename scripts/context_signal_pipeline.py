@@ -2,6 +2,7 @@ import argparse
 import datetime as dt
 import json
 import urllib.parse
+from email.utils import parsedate_to_datetime
 from dataclasses import dataclass, asdict
 from typing import Optional
 
@@ -222,7 +223,7 @@ def extract_query_terms(company: str, sentence: str) -> list[str]:
     return list(dict.fromkeys([term for term in terms if term]))
 
 
-def fetch_google_news_rss(company: str, sentence: str, event_date: Optional[str] = None, limit: int = 8) -> dict:
+def fetch_google_news_rss(company: str, sentence: str, event_date: Optional[str] = None, limit: int = 8, before_days: int = 3, after_days: int = 10) -> dict:
     try:
         import feedparser
     except Exception as exc:
@@ -232,8 +233,8 @@ def fetch_google_news_rss(company: str, sentence: str, event_date: Optional[str]
     date_filter = None
     if event_date:
         base = dt.datetime.strptime(event_date, "%Y-%m-%d").date()
-        after = (base - dt.timedelta(days=7)).isoformat()
-        before = (base + dt.timedelta(days=15)).isoformat()
+        after = (base - dt.timedelta(days=before_days)).isoformat()
+        before = (base + dt.timedelta(days=after_days + 1)).isoformat()
         date_filter = {"after": after, "before": before}
         query = f"{query} after:{after} before:{before}"
     encoded = urllib.parse.quote_plus(query)
@@ -244,16 +245,36 @@ def fetch_google_news_rss(company: str, sentence: str, event_date: Optional[str]
         return {"status": "error", "query": query, "url": url, "reason": str(exc)}
 
     items = []
+    buckets = {"pre_window": [], "event_day": [], "post_window": [], "unknown_date": []}
+    base_date = dt.datetime.strptime(event_date, "%Y-%m-%d").date() if event_date else None
     for entry in feed.entries[:limit]:
-        items.append(
-            {
-                "title": getattr(entry, "title", ""),
-                "link": getattr(entry, "link", ""),
-                "published": getattr(entry, "published", ""),
-                "source": getattr(getattr(entry, "source", None), "title", "Google News"),
-            }
-        )
-    return {"status": "ok", "query": query, "date_filter": date_filter, "url": url, "items": items}
+        published_raw = getattr(entry, "published", "")
+        published_date = None
+        bucket = "unknown_date"
+        if published_raw:
+            try:
+                published_date = parsedate_to_datetime(published_raw).date().isoformat()
+                if base_date:
+                    parsed = dt.datetime.strptime(published_date, "%Y-%m-%d").date()
+                    if parsed < base_date:
+                        bucket = "pre_window"
+                    elif parsed == base_date:
+                        bucket = "event_day"
+                    else:
+                        bucket = "post_window"
+            except Exception:
+                published_date = None
+        item = {
+            "title": getattr(entry, "title", ""),
+            "link": getattr(entry, "link", ""),
+            "published": published_raw,
+            "published_date": published_date,
+            "bucket": bucket,
+            "source": getattr(getattr(entry, "source", None), "title", "Google News"),
+        }
+        items.append(item)
+        buckets.setdefault(bucket, []).append(item)
+    return {"status": "ok", "query": query, "date_filter": date_filter, "url": url, "items": items, "buckets": buckets}
 
 
 def match_rules(text: str):
@@ -264,7 +285,7 @@ def match_rules(text: str):
     return matched
 
 
-def build_card(company: str, ticker: Optional[str], sentence: str, event_date: Optional[str] = None, include_rss: bool = False) -> dict:
+def build_card(company: str, ticker: Optional[str], sentence: str, event_date: Optional[str] = None, include_rss: bool = False, rss_before: int = 3, rss_after: int = 10) -> dict:
     rules = match_rules(sentence)
     positive: list[Signal] = []
     negative: list[Signal] = []
@@ -307,7 +328,7 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
         "impact_paths": paths,
         "questions_to_check": list(dict.fromkeys(questions)),
         "price_reference": fetch_daily_prices(ticker, event_date) if event_date else {"status": "skipped", "reason": "기준일이 없어 가격 참고값을 계산하지 않았습니다."},
-        "rss_news": fetch_google_news_rss(company, sentence, event_date) if include_rss else {"status": "skipped", "reason": "--rss 옵션이 꺼져 있습니다."},
+        "rss_news": fetch_google_news_rss(company, sentence, event_date, before_days=rss_before, after_days=rss_after) if include_rss else {"status": "skipped", "reason": "--rss 옵션이 꺼져 있습니다."},
         "interpretation_guardrail": "이 결과는 호재/악재 결론이나 주가 원인 단정이 아니라, 판단 전에 확인할 신호 정리입니다.",
     }
 
@@ -376,8 +397,21 @@ def print_markdown(card: dict) -> None:
         print(f"- 검색어: {rss['query']}")
         if rss.get("date_filter"):
             print(f"- 날짜 필터: {rss['date_filter']['after']} ~ {rss['date_filter']['before']}")
-        for item in rss.get("items", []):
-            print(f"- {item['title']} ({item['published']})")
+        bucket_labels = [
+            ("pre_window", "기준일 전"),
+            ("event_day", "기준일 당일"),
+            ("post_window", "기준일 후"),
+            ("unknown_date", "날짜 확인 불가"),
+        ]
+        for bucket_key, bucket_label in bucket_labels:
+            bucket_items = rss.get("buckets", {}).get(bucket_key, [])
+            if not bucket_items:
+                continue
+            print()
+            print(f"### {bucket_label}")
+            for item in bucket_items:
+                date_text = item.get("published_date") or item.get("published") or "날짜 없음"
+                print(f"- {date_text}: {item['title']}")
         print()
     elif rss.get("status") not in (None, "skipped"):
         print("## RSS 동시 뉴스 후보")
@@ -405,10 +439,12 @@ def main() -> None:
     parser.add_argument("--sentence", required=True)
     parser.add_argument("--date", help="가격 참고값 계산 기준일입니다. 예: 2025-09-03")
     parser.add_argument("--rss", action="store_true", help="Google News RSS 동시 뉴스 후보를 붙입니다.")
+    parser.add_argument("--rss-before", type=int, default=3, help="RSS 검색 시작 범위: 기준일 전 N일")
+    parser.add_argument("--rss-after", type=int, default=10, help="RSS 검색 종료 범위: 기준일 후 N일")
     parser.add_argument("--json", action="store_true", help="JSON으로 출력합니다.")
     args = parser.parse_args()
 
-    card = build_card(args.company, args.ticker, args.sentence, args.date, args.rss)
+    card = build_card(args.company, args.ticker, args.sentence, args.date, args.rss, args.rss_before, args.rss_after)
     if args.json:
         print(json.dumps(card, ensure_ascii=False, indent=2))
     else:
