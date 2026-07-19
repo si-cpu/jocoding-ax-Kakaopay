@@ -213,3 +213,27 @@ MVP 이후에는 다음 방향으로 확장할 수 있습니다. 단, 현재 제
 - 품질 관리: 오매핑 사례를 모아 앵커 사전과 보류 조건을 지속 업데이트
 - 사용자 교육 강화: “왜 이 입력은 확정 사건이 아닌지”를 더 쉽게 설명하는 예시 카드 추가
 - 운영 안전장치: 투자 추천으로 오해될 표현을 점검하고, 응답마다 예측 아님·투자 권유 아님 고지 유지
+
+## OpenAI LLM 보조판단 설정
+
+API 키는 채팅이나 커밋에 직접 붙이지 말고, git에서 제외된 `.env` 파일에만 넣는다.
+
+```env
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-5-mini
+```
+
+실행:
+
+```bash
+python3 scripts/context_signal_pipeline.py \
+  --company SK하이닉스 \
+  --ticker 000660 \
+  --sentence "엔비디아 HBM 수요 확대는 SK하이닉스에 좋은 이슈야?" \
+  --date 2025-04-04 \
+  --rss \
+  --llm
+```
+
+주의: 한 번 채팅이나 로그에 노출된 API 키는 폐기하고 새 키로 교체하는 것이 안전하다.
+

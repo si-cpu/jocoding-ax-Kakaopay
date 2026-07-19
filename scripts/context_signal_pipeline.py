@@ -6,6 +6,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Optional
 
@@ -740,6 +741,25 @@ LLM_ASSESSMENT_SCHEMA = {
 }
 
 
+def load_local_env(path: str = ".env") -> None:
+    env_path = Path(path)
+    if not env_path.exists():
+        return
+    try:
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
 def extract_response_text(payload: dict) -> str:
     if payload.get("output_text"):
         return payload["output_text"]
@@ -752,6 +772,7 @@ def extract_response_text(payload: dict) -> str:
 
 
 def call_openai_structured(prompt: str, model: str, timeout: int = 45) -> dict:
+    load_local_env()
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return {"status": "skipped", "reason": "OPENAI_API_KEY 환경변수가 없어 LLM 평가를 건너뜁니다."}
