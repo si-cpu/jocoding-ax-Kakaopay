@@ -360,6 +360,7 @@ ISSUE_TYPE_KEYWORDS = {
     "strike": ["파업", "노조", "임단협", "생산 차질", "생산중단"],
     "order_contract": ["수주", "공급계약", "LNG선", "계약", "인도"],
     "owner_legal": ["오너", "구속", "수사", "압수수색", "김범수", "법원"],
+    "platform_regulation": ["플랫폼 규제", "플랫폼법", "온라인 플랫폼", "광고 규제", "커머스 규제"],
     "flow_sell": ["순매도", "대량 매도", "공매도", "보호예수", "블록딜"],
     "flow_buy": ["순매수", "대량 매수", "지수 편입", "MSCI 편입"],
 }
@@ -381,17 +382,22 @@ INDUSTRY_DIRECTION_RULES = {
     },
     "rare_earth_control": {
         "반도체/전자": ("악재 신호", "희토류 수출통제는 부품·장비 공급망과 원가 불확실성을 키울 수 있음"),
+        "반도체": ("악재 신호", "희토류 수출통제는 반도체 소재·장비 공급망 불확실성을 키울 수 있음"),
         "배터리": ("악재 신호", "희토류·핵심광물 통제는 소재 조달 부담으로 이어질 수 있음"),
         "자동차": ("악재 신호", "전기차 모터·부품 공급망 부담 가능성이 있음"),
     },
     "strike": {
         "자동차": ("악재 신호", "완성차 생산 차질과 출고 지연 우려가 직접 발생할 수 있음"),
+        "조선": ("악재 신호", "조선업 파업은 생산 일정과 인도 지연 우려로 이어질 수 있음"),
     },
     "order_contract": {
         "조선": ("호재 신호", "조선사의 수주는 수주잔고와 향후 매출 가시성 개선으로 해석될 수 있음"),
     },
     "owner_legal": {
         "플랫폼/인터넷": ("악재 신호", "오너·경영진 수사 이슈는 지배구조와 경영 불확실성, 규제 리스크로 해석될 수 있음"),
+    },
+    "platform_regulation": {
+        "플랫폼/인터넷": ("악재 신호", "플랫폼 규제 강화는 광고·커머스·수수료 정책과 사업 확장성에 부담이 될 수 있음"),
     },
     "flow_sell": {
         "default": ("악재 신호", "대량 순매도·공매도·보호예수 해제는 단기 수급 부담 신호일 수 있음"),
@@ -430,6 +436,7 @@ def detect_issue_codes(text: str) -> list[str]:
         "subsidy_cut",
         "flow_sell",
         "owner_legal",
+        "platform_regulation",
         "strike",
         "rare_earth_control",
         "hbm_demand",
@@ -483,6 +490,175 @@ ISSUE_COMPANY_REASONS = {
     "smartphone_demand": "스마트폰 수요 이슈는 완제품 또는 모바일 부품 노출이 있는 회사에 더 직접적임",
     "rare_earth_control": "희토류/공급망 통제 이슈는 직접 사용 여부와 사업부별 공급망 의존도 확인이 필요함",
 }
+
+
+ISSUE_RELEVANCE_ROUTES = {
+    "hbm_demand": {
+        "label": "HBM/AI 반도체 수요 파급",
+        "industries": {"반도체": 1, "반도체/전자": 1},
+        "segments": ["hbm"],
+        "exposure_keywords": ["HBM", "AI", "엔비디아", "메모리", "반도체"],
+        "path": ["AI/HBM 수요", "HBM 공급사/메모리 업체", "해당 회사의 HBM·메모리 노출"],
+    },
+    "foundry_yield": {
+        "label": "파운드리 수율/경쟁 파급",
+        "industries": {"반도체/전자": 1},
+        "segments": ["foundry"],
+        "path": ["파운드리 수율/경쟁", "위탁생산 경쟁력", "파운드리 사업 노출 회사"],
+    },
+    "memory_price": {
+        "label": "메모리 업황 파급",
+        "industries": {"반도체": 1, "반도체/전자": 1},
+        "segments": ["memory", "dram", "nand"],
+        "path": ["메모리 가격/재고", "메모리 업체 매출·마진", "메모리 사업 노출 회사"],
+    },
+    "subsidy_cut": {
+        "label": "전기차/배터리 정책 축소 파급",
+        "industries": {"배터리": 1, "자동차": 1},
+        "exposure_keywords": ["배터리", "전기차", "보조금", "IRA"],
+        "path": ["정책 지원 축소", "전기차 수요/투자 조건 변화", "배터리·자동차 노출 회사"],
+    },
+    "subsidy_expand": {
+        "label": "전기차/배터리 정책 지원 파급",
+        "industries": {"배터리": 1, "자동차": 1},
+        "exposure_keywords": ["배터리", "전기차", "보조금", "IRA"],
+        "path": ["정책 지원 확대", "전기차 수요/투자 조건 개선", "배터리·자동차 노출 회사"],
+    },
+    "oil_price_up": {
+        "label": "유가/에너지 비용 파급",
+        "industries": {"항공": 1, "정유": 1, "자동차": 2},
+        "exposure_keywords": ["유가", "원유", "정제마진", "유류할증료", "항공", "전기차"],
+        "path": ["국제유가 상승", "연료비·정제마진·소비심리 변화", "에너지 비용/수요 노출 회사"],
+    },
+    "rare_earth_control": {
+        "label": "희토류/공급망 통제 파급",
+        "industries": {"반도체": 2, "반도체/전자": 2, "배터리": 2, "자동차": 2},
+        "exposure_keywords": ["공급망", "희토류", "반도체", "배터리", "전기차"],
+        "path": ["희토류 수출통제", "소재·부품 조달 불확실성", "공급망 노출 회사"],
+    },
+    "order_contract": {
+        "label": "수주/공급계약 직접 이벤트",
+        "industries": {"조선": 0},
+        "exposure_keywords": ["수주", "LNG선", "선박", "조선", "방산"],
+        "path": ["수주/공급계약", "수주잔고·매출 가시성", "계약 당사 회사"],
+    },
+    "strike": {
+        "label": "파업/생산차질 직접 이벤트",
+        "industries": {"자동차": 0, "조선": 0},
+        "exposure_keywords": ["노사", "파업", "생산", "조업"],
+        "path": ["노사 이슈", "생산 차질 가능성", "생산 노출 회사"],
+    },
+    "owner_legal": {
+        "label": "오너/지배구조 직접 이벤트",
+        "industries": {"플랫폼/인터넷": 0},
+        "exposure_keywords": ["오너", "지배구조", "규제", "플랫폼"],
+        "path": ["오너/경영진 법률 이슈", "지배구조·경영 불확실성", "회사 신뢰/사업 운영"],
+    },
+    "platform_regulation": {
+        "label": "플랫폼 규제 정책 파급",
+        "industries": {"플랫폼/인터넷": 1},
+        "exposure_keywords": ["플랫폼", "광고", "커머스", "규제"],
+        "path": ["플랫폼 규제 강화", "광고·커머스 정책 부담", "플랫폼 사업 노출 회사"],
+    },
+    "flow_sell": {
+        "label": "수급/시장구조 직접 신호",
+        "universal_if_company_mentioned": True,
+        "path": ["수급 데이터", "단기 매물 부담", "해당 종목 거래 흐름"],
+    },
+    "flow_buy": {
+        "label": "수급/시장구조 직접 신호",
+        "universal_if_company_mentioned": True,
+        "path": ["수급 데이터", "단기 매수 유입", "해당 종목 거래 흐름"],
+    },
+}
+
+
+def issue_context_relevance_gate(issue_codes: list[str], profile: dict, text: str) -> dict:
+    """Check whether the company sits inside the issue's propagation route.
+
+    This runs before strong direction wording. A news keyword can be important
+    in the market, but if the company's industry/exposure is outside the route,
+    we should not force a bullish/bearish label onto that company.
+    """
+    if not issue_codes:
+        return {
+            "status": "no_issue",
+            "relevance": "관련 낮음",
+            "impact_distance": "관련 낮음",
+            "direction_permission": "block",
+            "reason": "입력에서 인식된 이슈 코드가 없어 회사별 방향성을 판단하지 않습니다.",
+            "matched_routes": [],
+        }
+
+    industry = profile.get("industry", "미분류")
+    exposures = profile.get("exposures", [])
+    segments = profile.get("business_segments", {})
+    aliases = profile.get("aliases", [])
+    company_mentioned = contains_any(text, aliases)
+    matched = []
+
+    for code in issue_codes:
+        route = ISSUE_RELEVANCE_ROUTES.get(code)
+        if not route:
+            continue
+
+        if route.get("universal_if_company_mentioned") and company_mentioned:
+            matched.append({
+                "issue_code": code,
+                "route": route["label"],
+                "impact_level": 0,
+                "relevance": "수급/감성 관련",
+                "path": route.get("path", []),
+                "reason": "회사명이 포함된 종목 수급/시장구조 신호입니다.",
+            })
+            continue
+
+        level = None
+        reason = None
+        segment_hits = [segment for segment in route.get("segments", []) if segment in segments and segments.get(segment) != "low"]
+        if segment_hits:
+            strongest = max([segments.get(segment) for segment in segment_hits], key=lambda value: {"very_high": 5, "high": 4, "medium_high": 3, "medium": 2, "medium_low": 1, "low": 0}.get(value, -1))
+            level = 0 if strongest in ("very_high", "high") else 1
+            reason = "회사 사업부 노출도가 이슈 파급 경로와 맞습니다."
+        elif route.get("industries", {}).get(industry) is not None:
+            level = route.get("industries", {}).get(industry)
+            reason = f"{industry} 업종이 이슈 파급 경로에 포함됩니다."
+        elif contains_any(" ".join(exposures), route.get("exposure_keywords", [])):
+            level = 2
+            reason = "회사 노출 키워드가 이슈 파급 경로와 맞습니다."
+
+        if level is not None:
+            relevance = "직접 관련" if level == 0 else "산업/공급망 관련"
+            matched.append({
+                "issue_code": code,
+                "route": route["label"],
+                "impact_level": level,
+                "relevance": relevance,
+                "path": route.get("path", []),
+                "reason": reason,
+            })
+
+    if not matched:
+        return {
+            "status": "ok",
+            "relevance": "관련 낮음",
+            "impact_distance": "관련 낮음",
+            "direction_permission": "block",
+            "reason": f"{industry} 업종/노출도가 입력 이슈의 1~3차 파급 경로에 걸리지 않았습니다.",
+            "matched_routes": [],
+        }
+
+    matched.sort(key=lambda item: item["impact_level"])
+    lead = matched[0]
+    distance = "직접" if lead["impact_level"] == 0 else f"{lead['impact_level']}단계 간접"
+    return {
+        "status": "ok",
+        "relevance": lead["relevance"],
+        "impact_distance": distance,
+        "direction_permission": "allow",
+        "reason": lead["reason"],
+        "matched_routes": matched,
+    }
 
 
 def company_specific_assessment(issue_codes: list[str], profile: dict) -> Optional[dict]:
@@ -644,11 +820,17 @@ def classify_news_item(title: str, company: str, sentence: str, profile: Optiona
         confidence = "뉴스 확인"
 
     relevance, relevance_reason = assess_relevance(title, profile)
+    propagation_gate = issue_context_relevance_gate(issue_codes, profile, title_text)
     # 개별 RSS 제목에 이슈 키워드가 직접 잡힐 때만 산업별 방향 룰을 강하게 적용한다.
     # 입력 문장의 이슈를 모든 뉴스에 덮어씌우면 관련 없는 기사까지 같은 호재/악재로 오염된다.
     company_assessment = company_specific_assessment(title_issue_codes or context_issue_codes, profile)
     override = industry_direction(title_issue_codes, profile.get("industry", "미분류"))
-    if override and relevance != "관련 낮음":
+    if propagation_gate.get("direction_permission") == "block":
+        direction = "관련 낮음"
+        relevance = "관련 낮음"
+        relevance_reason = propagation_gate.get("reason", relevance_reason)
+        direction_reason = "회사가 해당 이슈의 1~3차 파급 경로 밖에 있어 방향성을 강하게 판단하지 않습니다."
+    elif override and relevance != "관련 낮음":
         direction = override["direction"]
         direction_reason = override["reason"]
     else:
@@ -682,6 +864,7 @@ def classify_news_item(title: str, company: str, sentence: str, profile: Optiona
         "relevance_reason": relevance_reason,
         "industry": profile.get("industry", "미분류"),
         "industry_direction_rule": override,
+        "context_relevance_gate": propagation_gate,
         "company_specific_assessment": company_assessment,
         "channels": unique(channels),
         "emotions": unique(emotions),
@@ -1149,11 +1332,31 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
             "기준일로 삼을 수 있는 공식 발표일이 있는가?",
         ]
 
-    signal_balance = "혼합" if positive and negative else "호재 중심" if positive else "악재 중심" if negative else "확인 필요"
-
     company_profile = get_company_profile(company, ticker)
     input_issue_codes = detect_issue_codes(sentence)
+    context_relevance_gate = issue_context_relevance_gate(input_issue_codes, company_profile, sentence)
     company_context_assessment = company_specific_assessment(input_issue_codes, company_profile)
+    signal_balance = "혼합" if positive and negative else "호재 중심" if positive else "악재 중심" if negative else "확인 필요"
+    if context_relevance_gate.get("direction_permission") == "block":
+        signal_balance = "관련 낮음"
+        positive = []
+        negative = []
+        questions = list(dict.fromkeys(questions + [
+            "이 회사가 입력 이슈의 1~3차 파급 경로 안에 실제로 포함되는가?",
+            "회사 사업보고서나 매출 비중에서 해당 이슈 노출도가 확인되는가?",
+            "단순 테마/키워드 언급인지 실제 사업 연결고리인지 구분했는가?",
+        ]))
+    else:
+        card_direction_rule = industry_direction(input_issue_codes, company_profile.get("industry", "미분류"))
+        if card_direction_rule and card_direction_rule.get("issue_code") not in {"order_contract"}:
+            if card_direction_rule["direction"] == "호재 신호":
+                signal_balance = "호재 중심"
+            elif card_direction_rule["direction"] == "악재 신호":
+                signal_balance = "악재 중심"
+            elif card_direction_rule["direction"] == "혼합 신호":
+                signal_balance = "혼합"
+            else:
+                signal_balance = "확인 필요"
     price_reference = fetch_daily_prices(ticker, event_date) if event_date else {"status": "skipped", "reason": "기준일이 없어 가격 참고값을 계산하지 않았습니다."}
     rss_news = fetch_google_news_rss(company, sentence, event_date, before_days=rss_before, after_days=rss_after) if include_rss else {"status": "skipped", "reason": "--rss 옵션이 꺼져 있습니다."}
     rss_news = enrich_rss_news(rss_news, company, sentence, company_profile)
@@ -1169,6 +1372,7 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
         "input": sentence,
         "company_profile": company_profile,
         "input_issue_codes": input_issue_codes,
+        "context_relevance_gate": context_relevance_gate,
         "company_context_assessment": company_context_assessment,
         "origins": list(dict.fromkeys(origins)),
         "issue_types": list(dict.fromkeys(issue_types)),
