@@ -1,7 +1,10 @@
 import argparse
 import datetime as dt
 import json
+import os
+import urllib.error
 import urllib.parse
+import urllib.request
 from email.utils import parsedate_to_datetime
 from dataclasses import dataclass, asdict
 from typing import Optional
@@ -706,6 +709,151 @@ def enrich_rss_news(rss: dict, company: str, sentence: str, profile: Optional[di
     return rss
 
 
+LLM_ASSESSMENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "index": {"type": "integer"},
+                    "relevance": {"type": "string", "enum": ["직접 관련", "업종 관련", "노출도 관련", "거시/정책 관련", "관련 낮음"]},
+                    "direction": {"type": "string", "enum": ["호재 신호", "악재 신호", "혼합 신호", "불명확"]},
+                    "effect_level": {"type": "integer", "enum": [0, 1, 2, 3, 4]},
+                    "emotion_tags": {"type": "array", "items": {"type": "string"}},
+                    "issue_types": {"type": "array", "items": {"type": "string"}},
+                    "company_sensitivity": {"type": "string", "enum": ["매우 높음", "높음", "중상", "중간", "중하", "낮음", "불명확"]},
+                    "confidence": {"type": "string", "enum": ["높음", "중간", "낮음"]},
+                    "reason": {"type": "string"},
+                    "checkpoints": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["index", "relevance", "direction", "effect_level", "emotion_tags", "issue_types", "company_sensitivity", "confidence", "reason", "checkpoints"],
+            },
+        },
+        "summary": {"type": "string"},
+        "cautions": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["items", "summary", "cautions"],
+}
+
+
+def extract_response_text(payload: dict) -> str:
+    if payload.get("output_text"):
+        return payload["output_text"]
+    parts = []
+    for output in payload.get("output", []):
+        for content in output.get("content", []):
+            if content.get("type") in ("output_text", "text") and content.get("text"):
+                parts.append(content["text"])
+    return "\n".join(parts).strip()
+
+
+def call_openai_structured(prompt: str, model: str, timeout: int = 45) -> dict:
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return {"status": "skipped", "reason": "OPENAI_API_KEY 환경변수가 없어 LLM 평가를 건너뜁니다."}
+
+    body = {
+        "model": model,
+        "input": prompt,
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "stock_context_news_assessment",
+                "schema": LLM_ASSESSMENT_SCHEMA,
+                "strict": True,
+            }
+        },
+    }
+    request = urllib.request.Request(
+        "https://api.openai.com/v1/responses",
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        return {"status": "error", "reason": f"OpenAI API HTTP {exc.code}: {detail}"}
+    except Exception as exc:
+        return {"status": "error", "reason": str(exc)}
+
+    output_text = extract_response_text(payload)
+    if not output_text:
+        return {"status": "error", "reason": "OpenAI 응답에서 텍스트를 찾지 못했습니다.", "raw_status": payload.get("status")}
+    try:
+        parsed = json.loads(output_text)
+    except Exception as exc:
+        return {"status": "error", "reason": f"LLM JSON 파싱 실패: {exc}", "raw_text": output_text[:1000]}
+    parsed["status"] = "ok"
+    parsed["model"] = model
+    return parsed
+
+
+def build_llm_news_prompt(company: str, sentence: str, profile: dict, items: list[dict]) -> str:
+    compact_items = []
+    for index, item in enumerate(items):
+        compact_items.append({
+            "index": index,
+            "title": item.get("title", ""),
+            "date": item.get("published_date"),
+            "source": item.get("source"),
+            "rule_signal": item.get("signal", {}),
+        })
+    return json.dumps(
+        {
+            "role": "stock_context_signal_classifier",
+            "instruction": (
+                "너는 투자 추천을 하지 않는다. 뉴스 제목을 회사/산업/노출도 관점의 상황 신호로만 분류한다. "
+                "주가 원인을 단정하지 말고, 직접 관련/간접 관련/관련 낮음을 구분한다. "
+                "같은 업종 내 기업별 사업 포트폴리오 차이를 반드시 반영한다. "
+                "여러 이슈가 섞인 제목은 issue_types에 복수로 표시하고, reason에는 왜 그렇게 봤는지 짧게 쓴다."
+            ),
+            "effect_level_definition": {
+                "0": "기준 사건: 회사 자체의 공식/직접 사건",
+                "1": "직접 작용: 매출·비용·생산·계약에 바로 닿는 신호",
+                "2": "산업/공급망 파급: 동종업계·경쟁사·공급망 신호",
+                "3": "외부환경 결합: 정책·거시·국제정세·원자재 신호",
+                "4": "시장 반응/심리: 주가·수급·테마·심리 신호",
+            },
+            "company": company,
+            "input_sentence": sentence,
+            "company_profile": profile,
+            "news_items": compact_items,
+            "output_language": "ko-KR",
+        },
+        ensure_ascii=False,
+    )
+
+
+def attach_llm_assessment(rss: dict, company: str, sentence: str, profile: dict, model: str, limit: int = 8) -> dict:
+    if rss.get("status") != "ok":
+        rss["llm_assessment"] = {"status": "skipped", "reason": "RSS 뉴스가 없어 LLM 평가를 건너뜁니다."}
+        return rss
+    items = rss.get("items", [])[:limit]
+    if not items:
+        rss["llm_assessment"] = {"status": "skipped", "reason": "LLM으로 평가할 뉴스가 없습니다."}
+        return rss
+    prompt = build_llm_news_prompt(company, sentence, profile, items)
+    assessment = call_openai_structured(prompt, model)
+    rss["llm_assessment"] = assessment
+    if assessment.get("status") != "ok":
+        return rss
+    for llm_item in assessment.get("items", []):
+        index = llm_item.get("index")
+        if isinstance(index, int) and 0 <= index < len(items):
+            items[index]["llm_signal"] = llm_item
+    return rss
+
+
 def assess_pre_event_reflection(price: dict, rss: dict) -> dict:
     score = 0
     reasons = []
@@ -951,7 +1099,7 @@ def match_rules(text: str):
     return matched
 
 
-def build_card(company: str, ticker: Optional[str], sentence: str, event_date: Optional[str] = None, include_rss: bool = False, rss_before: int = 3, rss_after: int = 10) -> dict:
+def build_card(company: str, ticker: Optional[str], sentence: str, event_date: Optional[str] = None, include_rss: bool = False, rss_before: int = 3, rss_after: int = 10, use_llm: bool = False, llm_model: Optional[str] = None) -> dict:
     rules = match_rules(sentence)
     positive: list[Signal] = []
     negative: list[Signal] = []
@@ -988,6 +1136,11 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
     price_reference = fetch_daily_prices(ticker, event_date) if event_date else {"status": "skipped", "reason": "기준일이 없어 가격 참고값을 계산하지 않았습니다."}
     rss_news = fetch_google_news_rss(company, sentence, event_date, before_days=rss_before, after_days=rss_after) if include_rss else {"status": "skipped", "reason": "--rss 옵션이 꺼져 있습니다."}
     rss_news = enrich_rss_news(rss_news, company, sentence, company_profile)
+    selected_llm_model = llm_model or os.environ.get("OPENAI_MODEL") or "gpt-5-mini"
+    if use_llm:
+        rss_news = attach_llm_assessment(rss_news, company, sentence, company_profile, selected_llm_model)
+    else:
+        rss_news["llm_assessment"] = {"status": "skipped", "reason": "--llm 옵션이 꺼져 있습니다."}
 
     card = {
         "company": company,
@@ -1006,7 +1159,8 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
         "price_reference": price_reference,
         "rss_news": rss_news,
         "pre_event_reflection": assess_pre_event_reflection(price_reference, rss_news),
-        "analysis_frame": "anchorless_issue_context_v2",
+        "llm_model": selected_llm_model if use_llm else None,
+        "analysis_frame": "anchorless_issue_context_v3_llm_optional",
         "interpretation_guardrail": "이 결과는 호재/악재 결론이나 주가 원인 단정이 아니라, 현재 이슈를 둘러싼 상황 신호 정리입니다.",
     }
     card["historical_comparison"] = match_historical_case(company, sentence, card)
@@ -1044,6 +1198,13 @@ def print_analysis_layers(card: dict) -> None:
                 if signal.get("company_specific_assessment"):
                     assessment = signal["company_specific_assessment"]
                     print(f"  - 기업별 2차 판단: 민감도 {assessment['sensitivity_label']} / {assessment['reason']}")
+                if item.get("llm_signal"):
+                    llm = item["llm_signal"]
+                    emotions_llm = ", ".join(llm.get("emotion_tags", [])) or "없음"
+                    issue_types_llm = ", ".join(llm.get("issue_types", [])) or "없음"
+                    print(f"  - LLM 보조판단: {llm.get('direction')} / 관련성 {llm.get('relevance')} / {llm.get('effect_level')}차 / 민감도 {llm.get('company_sensitivity')} / 확신도 {llm.get('confidence')}")
+                    print(f"    - 이슈/감정: {issue_types_llm} / {emotions_llm}")
+                    print(f"    - 근거: {llm.get('reason')}")
             print()
 
         print("## 이슈 감정")
@@ -1183,6 +1344,21 @@ def print_markdown(card: dict) -> None:
                 date_text = item.get("published_date") or item.get("published") or "날짜 없음"
                 print(f"- {date_text}: {item['title']}")
         print()
+        llm_assessment = rss.get("llm_assessment", {})
+        if llm_assessment:
+            print("## LLM 보조판단")
+            print()
+            if llm_assessment.get("status") == "ok":
+                print(f"- 모델: {llm_assessment.get('model')}")
+                print(f"- 요약: {llm_assessment.get('summary')}")
+                cautions = llm_assessment.get("cautions", [])
+                if cautions:
+                    print("- 주의:")
+                    for caution in cautions:
+                        print(f"  - {caution}")
+            else:
+                print(f"- {llm_assessment.get('status')}: {llm_assessment.get('reason')}")
+            print()
     elif rss.get("status") not in (None, "skipped"):
         print("## RSS 동시 뉴스 후보")
         print()
@@ -1213,10 +1389,12 @@ def main() -> None:
     parser.add_argument("--rss", action="store_true", help="Google News RSS 동시 뉴스 후보를 붙입니다.")
     parser.add_argument("--rss-before", type=int, default=3, help="RSS 검색 시작 범위: 기준일 전 N일")
     parser.add_argument("--rss-after", type=int, default=10, help="RSS 검색 종료 범위: 기준일 후 N일")
+    parser.add_argument("--llm", action="store_true", help="OpenAI API로 RSS 뉴스 보조판단을 붙입니다. OPENAI_API_KEY가 필요합니다.")
+    parser.add_argument("--llm-model", default=None, help="LLM 보조판단에 사용할 모델입니다. 기본값은 OPENAI_MODEL 또는 gpt-5-mini입니다.")
     parser.add_argument("--json", action="store_true", help="JSON으로 출력합니다.")
     args = parser.parse_args()
 
-    card = build_card(args.company, args.ticker, args.sentence, args.date, args.rss, args.rss_before, args.rss_after)
+    card = build_card(args.company, args.ticker, args.sentence, args.date, args.rss, args.rss_before, args.rss_after, args.llm, args.llm_model)
     if args.json:
         print(json.dumps(card, ensure_ascii=False, indent=2))
     else:
