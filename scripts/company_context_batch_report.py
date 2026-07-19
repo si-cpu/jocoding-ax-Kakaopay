@@ -104,8 +104,29 @@ def summarize_card(card: dict) -> dict:
         "price_10d": offsets.get("10", {}),
         "pre_reflection": card.get("pre_event_reflection", {}),
         "market_contradiction": card.get("market_contradiction", {}),
+        "impact_gate": card.get("context_relevance_gate", {}),
+        "butterfly_path": extract_butterfly_path(card),
+        "positive_signals": [item.get("name") for item in card.get("positive_signals", [])[:3]],
+        "negative_signals": [item.get("name") for item in card.get("negative_signals", [])[:3]],
         "questions": card.get("questions_to_check", [])[:4],
     }
+
+
+def extract_butterfly_path(card: dict) -> list[str]:
+    gate = card.get("context_relevance_gate") or {}
+    routes = gate.get("matched_routes") or []
+    for route in routes:
+        path = route.get("path") or []
+        if path:
+            return path[:5]
+    paths = card.get("impact_paths") or []
+    if paths and isinstance(paths[0], str):
+        return paths[:5]
+    issue_types = card.get("issue_types") or []
+    company = card.get("company") or "해당 기업"
+    if issue_types:
+        return [issue_types[0], "산업/회사 맥락 확인", f"{company} 영향 가능성 점검"]
+    return ["입력 이슈", "회사 관련성 확인", "가격/공시/수급 확인"]
 
 
 def infer_context_sensitivity(card: dict) -> dict:
@@ -196,12 +217,88 @@ def pct_short(item: dict) -> str:
     return f"{item.get('change_pct', 0):.2f}%"
 
 
+def truncate_text(text: Optional[str], max_len: int = 180) -> str:
+    if not text:
+        return "없음"
+    text = re.sub(r"\s+", " ", str(text)).strip()
+    if len(text) <= max_len:
+        return text
+    return text[:max_len - 1].rstrip() + "…"
+
+
+def alignment_label(value: Optional[str]) -> str:
+    return {
+        "contradiction": "뉴스 방향과 가격이 반대로 움직임",
+        "muted_response": "뉴스 대비 가격 반응이 약함",
+        "aligned": "뉴스 방향과 가격이 대체로 일치",
+        "direction_not_asserted": "호재/악재가 섞여 방향을 단정하지 않음",
+    }.get(value or "", "판단 보류")
+
+
+def dart_label(status: Optional[str], event_type: Optional[str]) -> str:
+    if status == "official_match":
+        return f"공식 확인: {event_type or 'DART 공시'}"
+    if status == "not_found":
+        return "공식 공시 미발견"
+    if status == "skipped":
+        return "DART 확인 대상 아님"
+    if status == "error":
+        return "DART 확인 실패"
+    return "DART 정보 없음"
+
+
+def plain_takeaway(summary: dict) -> str:
+    company = summary.get("company")
+    signal = summary.get("signal_balance")
+    origin = summary.get("canonical_origin")
+    contradiction = summary.get("market_contradiction", {})
+    alignment = alignment_label(contradiction.get("alignment"))
+    if signal == "혼합":
+        return f"{company}는 {origin} 이슈 안에 호재와 악재가 함께 있어 결론보다 확인 순서가 중요합니다. 현재 가격 해석은 '{alignment}' 상태입니다."
+    if signal == "악재 중심":
+        return f"{company}는 악재 신호가 우세하지만, 가격이 반대로 움직였는지 확인해야 합니다. 현재 가격 해석은 '{alignment}' 상태입니다."
+    if signal == "호재 중심":
+        return f"{company}는 호재 신호가 우세하지만, 선행 가격 움직임과 기대치 반영 여부를 함께 봐야 합니다. 현재 가격 해석은 '{alignment}' 상태입니다."
+    return f"{company}는 방향을 단정하기보다 출발점, 공식 확인, 가격 움직임을 순서대로 확인해야 합니다."
+
+
+def price_window_table(summary: dict, body_style, font):
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, Table, TableStyle
+    pre = summary.get("pre_reflection", {})
+    rows = [[Paragraph("구간", body_style), Paragraph("관찰값", body_style), Paragraph("해석", body_style)]]
+    rows.append([
+        Paragraph("기준일 전", body_style),
+        Paragraph(f"{pre.get('observation_label') or pre.get('label') or '없음'} / 점수 {pre.get('score')}", body_style),
+        Paragraph("원인 판정이 아니라 선행 가격 움직임 관찰", body_style),
+    ])
+    for label, key in [("+3영업일", "price_3d"), ("+5영업일", "price_5d"), ("+10영업일", "price_10d")]:
+        rows.append([
+            Paragraph(label, body_style),
+            Paragraph(pct_text(summary.get(key, {})), body_style),
+            Paragraph("기준일 이후 참고 수익률", body_style),
+        ])
+    table = Table(rows, colWidths=[27*mm, 47*mm, 82*mm])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF2F8")),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D5D8DC")),
+        ("FONTNAME", (0, 0), (-1, -1), font),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    return table
+
+
 def save_pdf(report: dict, output: Optional[str]) -> Path:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, PageBreak
 
     if output:
         path = Path(output)
@@ -211,10 +308,12 @@ def save_pdf(report: dict, output: Optional[str]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     font = register_korean_font()
     styles = getSampleStyleSheet()
-    title = ParagraphStyle("TitleKo", parent=styles["Title"], fontName=font, fontSize=20, leading=26, textColor=colors.HexColor("#14213D"), spaceAfter=8)
-    h2 = ParagraphStyle("H2Ko", parent=styles["Heading2"], fontName=font, fontSize=13.5, leading=17, textColor=colors.HexColor("#1F4E79"), spaceBefore=10, spaceAfter=6)
-    body = ParagraphStyle("BodyKo", parent=styles["BodyText"], fontName=font, fontSize=8.8, leading=12.2)
-    small = ParagraphStyle("SmallKo", parent=body, fontSize=7.6, leading=10.5, textColor=colors.HexColor("#555555"))
+    title = ParagraphStyle("TitleKo", parent=styles["Title"], fontName=font, fontSize=21, leading=27, textColor=colors.HexColor("#14213D"), spaceAfter=8)
+    h2 = ParagraphStyle("H2Ko", parent=styles["Heading2"], fontName=font, fontSize=15, leading=19, textColor=colors.HexColor("#1F4E79"), spaceBefore=8, spaceAfter=6)
+    h3 = ParagraphStyle("H3Ko", parent=styles["Heading3"], fontName=font, fontSize=10.5, leading=13.5, textColor=colors.HexColor("#1F4E79"), spaceBefore=7, spaceAfter=4)
+    body = ParagraphStyle("BodyKo", parent=styles["BodyText"], fontName=font, fontSize=8.9, leading=12.4)
+    small = ParagraphStyle("SmallKo", parent=body, fontSize=7.5, leading=10.2, textColor=colors.HexColor("#555555"))
+    note = ParagraphStyle("NoteKo", parent=body, fontSize=8.2, leading=11.2, textColor=colors.HexColor("#333333"), backColor=colors.HexColor("#F7F9FB"), borderPadding=6, spaceAfter=5)
     doc = SimpleDocTemplate(str(path), pagesize=A4, rightMargin=14*mm, leftMargin=14*mm, topMargin=13*mm, bottomMargin=13*mm)
     story = []
     case_count = len(report.get("cases", []))
@@ -223,16 +322,17 @@ def save_pdf(report: dict, output: Optional[str]) -> Path:
     story.append(Paragraph(report.get("guardrail", ""), small))
     story.append(Spacer(1, 8))
 
-    overview = [[Paragraph("회사", body), Paragraph("상황", body), Paragraph("출발점/신호", body), Paragraph("불일치 후보", body), Paragraph("+10영업일", body)]]
+    story.append(Paragraph("한눈에 보기", h2))
+    overview = [[Paragraph("회사", body), Paragraph("무슨 이슈인가", body), Paragraph("현재 해석", body), Paragraph("봐야 할 후보", body), Paragraph("+10영업일", body)]]
     for entry in report["cases"]:
         s = entry["summary"]
         contradiction = s.get("market_contradiction", {})
         candidates = contradiction.get("candidates", []) if contradiction.get("status") == "ok" else []
-        candidate_text = "<br/>".join(f"- {c.get('label')}({c.get('confidence')})" for c in candidates[:2]) or contradiction.get("reason") or "없음"
+        candidate_text = "<br/>".join(f"- {c.get('label')} ({c.get('confidence')})" for c in candidates[:2]) or contradiction.get("reason") or "없음"
         overview.append([
             Paragraph(f"{s['company']}<br/>{s['ticker']}", body),
             Paragraph(s["input"], body),
-            Paragraph(f"{s['canonical_origin']} / {s['signal_balance']}<br/>민감도 {s['company_sensitivity']}<br/>{', '.join(s['issue_types'])}", body),
+            Paragraph(f"{s['canonical_origin']} / {s['signal_balance']}<br/>영향: {(s.get('impact_gate') or {}).get('impact_label', '확인 필요')}<br/>민감도 {s['company_sensitivity']}", body),
             Paragraph(candidate_text, body),
             Paragraph(pct_short(s["price_10d"]), body),
         ])
@@ -249,29 +349,115 @@ def save_pdf(report: dict, output: Optional[str]) -> Path:
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]))
     story.append(table)
-    story.append(Spacer(1, 8))
+    story.append(Paragraph("주의: 위 표는 매수/매도 판단이 아니라, 어떤 데이터를 더 봐야 하는지 정리한 탐색 지도입니다.", small))
 
-    for entry in report["cases"]:
+    for idx, entry in enumerate(report["cases"]):
+        story.append(PageBreak())
         s = entry["summary"]
-        block = [Paragraph(f"{s['company']} - {entry['case']['label']}", h2)]
+        gate = s.get("impact_gate") or {}
+        block = [Paragraph(f"{idx + 1}. {s['company']} - {entry['case']['label']}", h2)]
         block.append(Paragraph(f"<b>상황</b>: {s['input']}", body))
-        block.append(Paragraph(f"<b>출발점/산업/이슈</b>: {s['canonical_origin']} / {s['industry']} / {', '.join(s['issue_types'])}", body))
-        block.append(Paragraph(f"<b>DART</b>: {s.get('dart_status') or '없음'} {s.get('dart_event_type') or ''}", body))
-        block.append(Paragraph(f"<b>LLM 요약</b>: {s.get('llm_summary') or '없음'}", body))
+        block.append(Paragraph(f"<b>한 줄 해석</b>: {plain_takeaway(s)}", note))
+
+        status_table = Table([
+            [Paragraph("출발점", body), Paragraph("영향 단계", body), Paragraph("공식 확인", body), Paragraph("가격 해석", body)],
+            [
+                Paragraph(f"{s['canonical_origin']}<br/>{s['industry']}", body),
+                Paragraph(f"{gate.get('impact_label', '확인 필요')}<br/>{gate.get('impact_strength', '')}", body),
+                Paragraph(dart_label(s.get("dart_status"), s.get("dart_event_type")), body),
+                Paragraph(alignment_label((s.get("market_contradiction") or {}).get("alignment")), body),
+            ],
+        ], colWidths=[39*mm, 39*mm, 39*mm, 39*mm])
+        status_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF2F8")),
+            ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#FBFCFC")),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D5D8DC")),
+            ("FONTNAME", (0, 0), (-1, -1), font),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        block.append(status_table)
+
+        block.append(Paragraph("나비효과 경로", h3))
+        path_rows = []
+        for step, label in enumerate(s.get("butterfly_path") or []):
+            path_rows.append([Paragraph(f"{step}차", body), Paragraph(label, body)])
+        if not path_rows:
+            path_rows = [[Paragraph("확인", body), Paragraph("명확한 파급 경로를 추가 확인해야 합니다.", body)]]
+        path_table = Table(path_rows, colWidths=[16*mm, 140*mm])
+        path_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F2F6FA")),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D5D8DC")),
+            ("FONTNAME", (0, 0), (-1, -1), font),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        block.append(path_table)
+
+        block.append(Paragraph("호재와 악재를 분리해서 보기", h3))
+        pos_text = "<br/>".join(f"- {x}" for x in s.get("positive_signals") or []) or "- 뚜렷한 호재 신호 없음"
+        neg_text = "<br/>".join(f"- {x}" for x in s.get("negative_signals") or []) or "- 뚜렷한 악재 신호 없음"
+        signal_table = Table([
+            [Paragraph("호재 신호", body), Paragraph("악재/확인 신호", body)],
+            [Paragraph(pos_text, body), Paragraph(neg_text, body)],
+        ], colWidths=[78*mm, 78*mm])
+        signal_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, 0), colors.HexColor("#E8F6EF")),
+            ("BACKGROUND", (1, 0), (1, 0), colors.HexColor("#FDEDEC")),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D5D8DC")),
+            ("FONTNAME", (0, 0), (-1, -1), font),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        block.append(signal_table)
+
+        block.append(Paragraph("가격 움직임은 이렇게만 읽기", h3))
         pre = s.get("pre_reflection", {})
-        block.append(Paragraph(f"<b>선행 가격 움직임</b>: {pre.get('observation_label') or pre.get('label')} (점수 {pre.get('score')})", body))
-        block.append(Paragraph(f"<b>가격 참고</b>: +3 {pct_text(s['price_3d'])}, +5 {pct_text(s['price_5d'])}, +10 {pct_text(s['price_10d'])}", body))
+        block.append(price_window_table(s, body, font))
+        if pre.get("caution"):
+            block.append(Paragraph(f"주의: {pre.get('caution')}", small))
+
+        block.append(Paragraph("왜 다르게 움직였을까?", h3))
         contradiction = s.get("market_contradiction", {})
         if contradiction.get("status") == "ok":
             candidates = contradiction.get("candidates", [])
-            candidate_text = "; ".join(f"{c.get('label')}({c.get('confidence')})" for c in candidates[:3]) or "없음"
-            block.append(Paragraph(f"<b>뉴스-가격 불일치</b>: {contradiction.get('alignment')} / {candidate_text}", body))
+            candidate_rows = [[Paragraph("후보", body), Paragraph("근거", body), Paragraph("확신", body)]]
+            for candidate in candidates[:4]:
+                candidate_rows.append([
+                    Paragraph(candidate.get("label", ""), body),
+                    Paragraph(truncate_text(candidate.get("evidence"), 90), body),
+                    Paragraph(candidate.get("confidence", ""), body),
+                ])
+            candidate_table = Table(candidate_rows, colWidths=[44*mm, 90*mm, 22*mm])
+            candidate_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#FFF4E5")),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D5D8DC")),
+                ("FONTNAME", (0, 0), (-1, -1), font),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            block.append(candidate_table)
         else:
-            block.append(Paragraph(f"<b>뉴스-가격 불일치</b>: {contradiction.get('reason') or '가격 데이터 부족'}", body))
+            block.append(Paragraph(contradiction.get("reason") or "가격 데이터가 부족해 불일치 후보를 만들지 않았습니다.", body))
+
+        block.append(Paragraph("AI/RSS 보조판단", h3))
+        block.append(Paragraph(truncate_text(s.get("llm_summary"), 260), body))
         if s.get("questions"):
-            block.append(Paragraph("<b>확인 질문</b>: " + "; ".join(s["questions"]), small))
+            block.append(Paragraph("마지막 확인 질문", h3))
+            block.append(Paragraph("; ".join(s["questions"]), small))
         story.append(KeepTogether(block))
-        story.append(Spacer(1, 5))
 
     doc.build(story)
     return path
