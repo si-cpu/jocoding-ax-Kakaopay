@@ -307,3 +307,31 @@ python3 scripts/company_context_batch_report.py \
 ```
 
 LLM 호출이 지연되거나 실패하면 보고서는 중단하지 않고 규칙 기반 백업 신호를 표시한다. 이 경우 해당 회사의 판단 신뢰도는 낮게 보고, 공시·실적·정책 원문 확인이 필요하다.
+
+## 라벨셋 평가 테스트벤치
+
+차터가 말로만 맞는지 확인하기 위해 라벨셋 평가기를 둔다. RSS/LLM/API 호출 없이 현재 룰 기반 파이프라인을 빠르게 평가한다.
+
+기본 starter taxonomy 200건 실행:
+
+```bash
+python3 scripts/labelset_evaluation.py --limit 200
+```
+
+외부 라벨셋 템플릿 생성:
+
+```bash
+python3 scripts/labelset_evaluation.py \
+  --write-template output/labelset/labelset_template.json
+```
+
+외부 라벨셋 평가:
+
+```bash
+python3 scripts/labelset_evaluation.py \
+  --labelset-json path/to/labelset.json
+```
+
+외부 라벨셋은 회사, 종목코드, 입력 문장, 기대 라벨을 담은 JSON이다. 기대 라벨은 출발점, 확인도, 방향성, 영향 거리, 회사 관련성, 필수 확인 데이터, 안전성으로 구성한다.
+
+첫 기준선 결과에서는 방향성과 관련 낮음 방어가 가장 약했다. 특히 반도체 이슈가 카카오·항공·정유 같은 관련 낮은 회사에도 호재/악재 신호로 과하게 붙는 문제가 드러났다. 다음 개선은 `회사 관련성 낮음 -> 방향성 하향/불명확 처리`가 우선이다.
