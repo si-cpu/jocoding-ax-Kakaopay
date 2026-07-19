@@ -263,3 +263,25 @@ python3 scripts/situation_impact_pipeline.py \
 
 상황 지도는 투자 추천이나 가격 예측이 아니라, `상황 -> 영향 단계 -> 후보 산업/종목 -> 확인 데이터`를 정리하는 가설 지도다.
 
+## 5개 회사 상황 신호 배치 리포트
+
+여러 회사를 한 번에 비교할 때는 배치 리포트를 생성한다. 기본 대상은 SK하이닉스, 삼성전자, 카카오, 한화오션, LG에너지솔루션이다.
+
+```bash
+python3 scripts/company_context_batch_report.py
+```
+
+출력물:
+
+- `output/company_batch/*.json`: 회사별 카드 원본과 요약
+- `output/pdf/*_five_company_context.pdf`: 비교용 PDF 리포트
+
+저장된 JSON에서 PDF만 다시 만들 때는 API를 재호출하지 않는다.
+
+```bash
+python3 scripts/company_context_batch_report.py \
+  --from-json output/company_batch/example.json \
+  --pdf-output output/pdf/example.pdf
+```
+
+LLM 호출이 지연되거나 실패하면 보고서는 중단하지 않고 규칙 기반 백업 신호를 표시한다. 이 경우 해당 회사의 판단 신뢰도는 낮게 보고, 공시·실적·정책 원문 확인이 필요하다.
