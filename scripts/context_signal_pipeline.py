@@ -527,7 +527,7 @@ ISSUE_RELEVANCE_ROUTES = {
     "oil_price_up": {
         "label": "유가/에너지 비용 파급",
         "industries": {"항공": 1, "정유": 1, "자동차": 2},
-        "exposure_keywords": ["유가", "원유", "정제마진", "유류할증료", "항공", "전기차"],
+        "exposure_keywords": ["유가", "원유", "정제마진", "유류할증료", "항공"],
         "path": ["국제유가 상승", "연료비·정제마진·소비심리 변화", "에너지 비용/수요 노출 회사"],
     },
     "rare_earth_control": {
@@ -563,11 +563,13 @@ ISSUE_RELEVANCE_ROUTES = {
     "flow_sell": {
         "label": "수급/시장구조 직접 신호",
         "universal_if_company_mentioned": True,
+        "universal_impact_level": 4,
         "path": ["수급 데이터", "단기 매물 부담", "해당 종목 거래 흐름"],
     },
     "flow_buy": {
         "label": "수급/시장구조 직접 신호",
         "universal_if_company_mentioned": True,
+        "universal_impact_level": 4,
         "path": ["수급 데이터", "단기 매수 유입", "해당 종목 거래 흐름"],
     },
 }
@@ -580,12 +582,37 @@ def issue_context_relevance_gate(issue_codes: list[str], profile: dict, text: st
     in the market, but if the company's industry/exposure is outside the route,
     we should not force a bullish/bearish label onto that company.
     """
+    def level_meta(level: int) -> dict:
+        strength = {
+            0: "강함",
+            1: "중상",
+            2: "중간",
+            3: "낮음",
+            4: "낮음",
+            5: "매우 낮음",
+        }.get(level, "매우 낮음")
+        permission = "normal" if level <= 2 else "weak" if level in (3, 4) else "observe_only"
+        distance = "직접" if level == 0 else f"{level}차 영향"
+        if level <= 3:
+            legacy_distance = "직접" if level == 0 else f"{level}단계 간접"
+        elif level == 4:
+            legacy_distance = "테마 확장"
+        else:
+            legacy_distance = "관련 낮음"
+        return {
+            "impact_level": level,
+            "impact_strength": strength,
+            "direction_permission": permission,
+            "impact_distance": legacy_distance,
+            "impact_label": distance,
+        }
+
     if not issue_codes:
+        meta = level_meta(5)
         return {
             "status": "no_issue",
             "relevance": "관련 낮음",
-            "impact_distance": "관련 낮음",
-            "direction_permission": "block",
+            **meta,
             "reason": "입력에서 인식된 이슈 코드가 없어 회사별 방향성을 판단하지 않습니다.",
             "matched_routes": [],
         }
@@ -603,10 +630,11 @@ def issue_context_relevance_gate(issue_codes: list[str], profile: dict, text: st
             continue
 
         if route.get("universal_if_company_mentioned") and company_mentioned:
+            universal_level = route.get("universal_impact_level", 0)
             matched.append({
                 "issue_code": code,
                 "route": route["label"],
-                "impact_level": 0,
+                "impact_level": universal_level,
                 "relevance": "수급/감성 관련",
                 "path": route.get("path", []),
                 "reason": "회사명이 포함된 종목 수급/시장구조 신호입니다.",
@@ -639,23 +667,22 @@ def issue_context_relevance_gate(issue_codes: list[str], profile: dict, text: st
             })
 
     if not matched:
+        meta = level_meta(5)
         return {
             "status": "ok",
             "relevance": "관련 낮음",
-            "impact_distance": "관련 낮음",
-            "direction_permission": "block",
-            "reason": f"{industry} 업종/노출도가 입력 이슈의 1~3차 파급 경로에 걸리지 않았습니다.",
+            **meta,
+            "reason": f"{industry} 업종/노출도가 입력 이슈의 1~3차 파급 경로에 바로 걸리지 않아 5차 관찰 영향으로 낮춥니다.",
             "matched_routes": [],
         }
 
     matched.sort(key=lambda item: item["impact_level"])
     lead = matched[0]
-    distance = "직접" if lead["impact_level"] == 0 else f"{lead['impact_level']}단계 간접"
+    meta = level_meta(lead["impact_level"])
     return {
         "status": "ok",
         "relevance": lead["relevance"],
-        "impact_distance": distance,
-        "direction_permission": "allow",
+        **meta,
         "reason": lead["reason"],
         "matched_routes": matched,
     }
@@ -825,11 +852,11 @@ def classify_news_item(title: str, company: str, sentence: str, profile: Optiona
     # 입력 문장의 이슈를 모든 뉴스에 덮어씌우면 관련 없는 기사까지 같은 호재/악재로 오염된다.
     company_assessment = company_specific_assessment(title_issue_codes or context_issue_codes, profile)
     override = industry_direction(title_issue_codes, profile.get("industry", "미분류"))
-    if propagation_gate.get("direction_permission") == "block":
-        direction = "관련 낮음"
+    if propagation_gate.get("direction_permission") == "observe_only":
+        direction = "불명확"
         relevance = "관련 낮음"
         relevance_reason = propagation_gate.get("reason", relevance_reason)
-        direction_reason = "회사가 해당 이슈의 1~3차 파급 경로 밖에 있어 방향성을 강하게 판단하지 않습니다."
+        direction_reason = "회사가 해당 이슈의 가까운 파급 경로 밖에 있어 5차 관찰 영향으로만 표시하고 방향성을 판단하지 않습니다."
     elif override and relevance != "관련 낮음":
         direction = override["direction"]
         direction_reason = override["reason"]
@@ -1337,14 +1364,14 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
     context_relevance_gate = issue_context_relevance_gate(input_issue_codes, company_profile, sentence)
     company_context_assessment = company_specific_assessment(input_issue_codes, company_profile)
     signal_balance = "혼합" if positive and negative else "호재 중심" if positive else "악재 중심" if negative else "확인 필요"
-    if context_relevance_gate.get("direction_permission") == "block":
-        signal_balance = "관련 낮음"
+    if context_relevance_gate.get("direction_permission") == "observe_only":
+        signal_balance = "확인 필요"
         positive = []
         negative = []
         questions = list(dict.fromkeys(questions + [
-            "이 회사가 입력 이슈의 1~3차 파급 경로 안에 실제로 포함되는가?",
+            "이 회사가 입력 이슈의 가까운 파급 경로 안에 실제로 포함되는가?",
             "회사 사업보고서나 매출 비중에서 해당 이슈 노출도가 확인되는가?",
-            "단순 테마/키워드 언급인지 실제 사업 연결고리인지 구분했는가?",
+            "5차 관찰 영향 이상의 실제 사업 연결고리가 있는가?",
         ]))
     else:
         card_direction_rule = industry_direction(input_issue_codes, company_profile.get("industry", "미분류"))

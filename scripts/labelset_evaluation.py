@@ -193,6 +193,28 @@ def expected_distance(slot: Dict, industry: str) -> str:
     return slot.get("distance_by_industry", {}).get(industry, slot.get("default_distance", "관련 낮음"))
 
 
+def impact_level_from_distance(distance: str) -> int:
+    if distance == "직접":
+        return 0
+    if "1단계" in distance or "1차" in distance:
+        return 1
+    if "2단계" in distance or "2차" in distance:
+        return 2
+    if "3단계" in distance or "3차" in distance:
+        return 3
+    if "테마" in distance or "수급/감성" in distance or "4차" in distance:
+        return 4
+    return 5
+
+
+def impact_strength_from_level(level: int) -> str:
+    return {0: "강함", 1: "중상", 2: "중간", 3: "낮음", 4: "낮음", 5: "매우 낮음"}.get(level, "매우 낮음")
+
+
+def direction_permission_from_level(level: int) -> str:
+    return "normal" if level <= 2 else "weak" if level in (3, 4) else "observe_only"
+
+
 def generate_labelset(limit: int = 200) -> List[Dict]:
     cases: List[Dict] = []
     idx = 1
@@ -201,6 +223,7 @@ def generate_labelset(limit: int = 200) -> List[Dict]:
             sentence = slot["sentence"].format(company=company["company"])
             direction = expected_direction(slot, company["industry"])
             distance = expected_distance(slot, company["industry"])
+            impact_level = impact_level_from_distance(distance)
             cases.append({
                 "id": f"LC{idx:03d}",
                 "company": company["company"],
@@ -213,6 +236,9 @@ def generate_labelset(limit: int = 200) -> List[Dict]:
                     "confirmation": slot["confirmation"],
                     "direction": direction,
                     "impact_distance": distance,
+                    "impact_level": impact_level,
+                    "impact_strength": impact_strength_from_level(impact_level),
+                    "direction_permission": direction_permission_from_level(impact_level),
                     "company_relevance": "관련 낮음" if distance == "관련 낮음" else distance,
                     "required_data": slot["required_data"],
                     "safety": "매매추천 없음",
@@ -253,6 +279,9 @@ def generate_labelset(limit: int = 200) -> List[Dict]:
                 "confirmation": "루머/보류",
                 "direction": "불명확",
                 "impact_distance": "관련 낮음",
+                "impact_level": 5,
+                "impact_strength": "매우 낮음",
+                "direction_permission": "observe_only",
                 "company_relevance": "관련 낮음",
                 "required_data": ["공식 출처"],
                 "safety": "매매추천 없음",
@@ -324,11 +353,16 @@ def contains_forbidden_recommendation(text: str) -> bool:
 def predict(case: Dict) -> Dict:
     card = core.build_card(case["company"], case["ticker"], case["sentence"], event_date=None, include_rss=False, use_llm=False)
     serialized = json.dumps(card, ensure_ascii=False)
+    gate = card.get("context_relevance_gate") or {}
+    predicted_level = gate.get("impact_level", impact_level_from_distance(infer_impact_distance(card)))
     return {
         "origin": normalize_origin(card.get("origins", [])),
         "confirmation": infer_confirmation(case["sentence"], card),
         "direction": normalize_direction(card.get("signal_balance", "")),
         "impact_distance": infer_impact_distance(card),
+        "impact_level": predicted_level,
+        "impact_strength": gate.get("impact_strength", impact_strength_from_level(predicted_level)),
+        "direction_permission": gate.get("direction_permission", direction_permission_from_level(predicted_level)),
         "company_relevance": infer_impact_distance(card),
         "safety": "안전성 위반" if contains_forbidden_recommendation(serialized) else "매매추천 없음",
         "issue_types": card.get("issue_types", []),
@@ -340,12 +374,21 @@ def predict(case: Dict) -> Dict:
 def score_case(case: Dict, prediction: Dict) -> Dict:
     expected = case["expected"]
     checks = {}
-    for key in ["origin", "confirmation", "direction", "impact_distance", "safety"]:
+    for key in ["origin", "confirmation", "direction", "impact_distance", "impact_level", "impact_strength", "direction_permission", "safety"]:
         checks[key] = prediction.get(key) == expected.get(key)
     if expected.get("direction") == "불명확" and prediction.get("direction") == "관련 낮음":
         checks["direction"] = True
+    if expected.get("direction") == "관련 낮음" and prediction.get("direction") == "불명확":
+        checks["direction"] = True
     if expected.get("impact_distance") == "관련 낮음" and prediction.get("impact_distance") == "관련 낮음":
         checks["impact_distance"] = True
+    expected_level = expected.get("impact_level")
+    predicted_level = prediction.get("impact_level")
+    checks["impact_level_within_1"] = (
+        isinstance(expected_level, int)
+        and isinstance(predicted_level, int)
+        and abs(expected_level - predicted_level) <= 1
+    )
     failure_types = []
     if not checks["origin"]:
         failure_types.append("출발점 오분류")
@@ -357,6 +400,12 @@ def score_case(case: Dict, prediction: Dict) -> Dict:
         failure_types.append("관련 낮음 오판")
     elif not checks["impact_distance"]:
         failure_types.append("영향 거리 과대/과소평가")
+    if not checks["impact_level"]:
+        failure_types.append("영향 단계 오분류")
+    if not checks["direction_permission"]:
+        failure_types.append("방향 허용 정책 오분류")
+    if expected.get("direction_permission") == "observe_only" and prediction.get("direction") in ("호재 신호", "악재 신호", "혼합 신호"):
+        failure_types.append("관찰 전용 단계에서 방향성 과판단")
     if not checks["safety"]:
         failure_types.append("안전성 위반")
     if prediction.get("questions_count", 0) < 3:
@@ -377,7 +426,7 @@ def score_case(case: Dict, prediction: Dict) -> Dict:
 def summarize(results: List[Dict]) -> Dict:
     total = len(results)
     metrics = {}
-    for key in ["origin", "confirmation", "direction", "impact_distance", "safety"]:
+    for key in ["origin", "confirmation", "direction", "impact_distance", "impact_level", "impact_level_within_1", "impact_strength", "direction_permission", "safety"]:
         metrics[key] = {
             "correct": sum(1 for item in results if item["checks"].get(key)),
             "total": total,
@@ -385,6 +434,8 @@ def summarize(results: List[Dict]) -> Dict:
         }
     related_low = [item for item in results if item["expected"].get("impact_distance") == "관련 낮음"]
     related_low_ok = sum(1 for item in related_low if item["prediction"].get("impact_distance") == "관련 낮음")
+    observe_only = [item for item in results if item["expected"].get("direction_permission") == "observe_only"]
+    observe_only_ok = sum(1 for item in observe_only if item["prediction"].get("direction") not in ("호재 신호", "악재 신호", "혼합 신호"))
     failure_counts: Dict[str, int] = {}
     for item in results:
         for failure in item["failure_types"]:
@@ -398,6 +449,11 @@ def summarize(results: List[Dict]) -> Dict:
             "correct": related_low_ok,
             "total": len(related_low),
             "accuracy": round(related_low_ok / len(related_low), 4) if related_low else None,
+        },
+        "observe_only_guard": {
+            "correct": observe_only_ok,
+            "total": len(observe_only),
+            "accuracy": round(observe_only_ok / len(observe_only), 4) if observe_only else None,
         },
         "failure_counts": dict(sorted(failure_counts.items(), key=lambda item: (-item[1], item[0]))),
     }
@@ -438,8 +494,11 @@ def save_markdown(payload: Dict, path: Optional[str]) -> Path:
         lines.append(f"| {key} | {metric['correct']} | {metric['total']} | {metric['accuracy']:.1%} |")
     guard = summary["related_low_guard"]
     guard_accuracy = f"{guard['accuracy']:.1%}" if guard["accuracy"] is not None else "N/A"
+    observe_guard = summary["observe_only_guard"]
+    observe_guard_accuracy = f"{observe_guard['accuracy']:.1%}" if observe_guard["accuracy"] is not None else "N/A"
     lines += [
         f"| 관련 낮음 방어 | {guard['correct']} | {guard['total']} | {guard_accuracy} |",
+        f"| 5차 관찰 전용 방어 | {observe_guard['correct']} | {observe_guard['total']} | {observe_guard_accuracy} |",
         "",
         "## 실패 유형",
         "",
@@ -452,14 +511,15 @@ def save_markdown(payload: Dict, path: Optional[str]) -> Path:
         "",
         "## 대표 실패 20건",
         "",
-        "| ID | 회사 | 입력 | 기대 방향 | 실제 방향 | 실패 유형 |",
-        "|---|---|---|---|---|---|",
+        "| ID | 회사 | 입력 | 기대 단계 | 실제 단계 | 기대 방향 | 실제 방향 | 실패 유형 |",
+        "|---|---|---|---:|---:|---|---|---|",
     ]
     failures = [item for item in payload["results"] if not item["pass"]][:20]
     for item in failures:
         sentence = item["sentence"].replace("|", "/")
         lines.append(
             f"| {item['id']} | {item['company']} | {sentence} | "
+            f"{item['expected'].get('impact_level')} | {item['prediction'].get('impact_level')} | "
             f"{item['expected']['direction']} | {item['prediction']['direction']} | {', '.join(item['failure_types'])} |"
         )
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -472,6 +532,9 @@ LABELSET_TEMPLATE = {
         "confirmation": ["공식 확인", "데이터 확인", "뉴스 확인", "예상/전망", "루머/보류"],
         "direction": ["호재 신호", "악재 신호", "혼합 신호", "불명확", "관련 낮음"],
         "impact_distance": ["직접", "1단계 간접", "2단계 간접", "3단계 이상", "테마 확장", "관련 낮음", "수급/감성 관련"],
+        "impact_level": [0, 1, 2, 3, 4, 5],
+        "impact_strength": ["강함", "중상", "중간", "낮음", "매우 낮음"],
+        "direction_permission": ["normal", "weak", "observe_only"],
         "company_relevance": ["직접 관련", "산업 관련", "공급망 관련", "수급/감성 관련", "관련 낮음"],
         "safety": ["매매추천 없음"],
     },
@@ -487,8 +550,11 @@ LABELSET_TEMPLATE = {
                 "origin": "산업",
                 "confirmation": "예상/전망",
                 "direction": "혼합 신호",
-                "impact_distance": "1단계 간접",
-                "company_relevance": "산업 관련",
+                "impact_distance": "직접",
+                "impact_level": 0,
+                "impact_strength": "강함",
+                "direction_permission": "normal",
+                "company_relevance": "직접 관련",
                 "required_data": ["실적", "가격지표", "수급"],
                 "safety": "매매추천 없음",
             },
@@ -515,6 +581,9 @@ def load_labelset(path: str) -> List[Dict]:
                 "confirmation": expected.get("confirmation", "루머/보류"),
                 "direction": expected.get("direction", "불명확"),
                 "impact_distance": expected.get("impact_distance", "관련 낮음"),
+                "impact_level": expected.get("impact_level", impact_level_from_distance(expected.get("impact_distance", "관련 낮음"))),
+                "impact_strength": expected.get("impact_strength", impact_strength_from_level(expected.get("impact_level", impact_level_from_distance(expected.get("impact_distance", "관련 낮음"))))),
+                "direction_permission": expected.get("direction_permission", direction_permission_from_level(expected.get("impact_level", impact_level_from_distance(expected.get("impact_distance", "관련 낮음"))))),
                 "company_relevance": expected.get("company_relevance", expected.get("impact_distance", "관련 낮음")),
                 "required_data": expected.get("required_data", []),
                 "safety": expected.get("safety", "매매추천 없음"),
@@ -558,6 +627,9 @@ def print_summary(payload: Dict, json_path: Path, md_path: Path) -> None:
     guard = summary["related_low_guard"]
     guard_accuracy = f"{guard['accuracy']:.1%}" if guard["accuracy"] is not None else "N/A"
     print(f"- 관련 낮음 방어: {guard['correct']} / {guard['total']} ({guard_accuracy})")
+    observe_guard = summary["observe_only_guard"]
+    observe_guard_accuracy = f"{observe_guard['accuracy']:.1%}" if observe_guard["accuracy"] is not None else "N/A"
+    print(f"- 5차 관찰 전용 방어: {observe_guard['correct']} / {observe_guard['total']} ({observe_guard_accuracy})")
     print("- 실패 유형:")
     for failure, count in summary["failure_counts"].items():
         print(f"  - {failure}: {count}")
