@@ -80,9 +80,7 @@ def summarize_card(card: dict) -> dict:
     offsets = price.get("offsets", {}) if price.get("status") == "ok" else {}
     assessment = card.get("company_context_assessment") or {}
     fallback_assessment = infer_context_sensitivity(card)
-    llm_summary = llm.get("summary") if llm.get("status") == "ok" else llm.get("reason")
-    if llm_summary and "timed out" in str(llm_summary).lower():
-        llm_summary = "LLM 판단 시간이 초과되어 규칙 기반 백업 신호를 표시했습니다."
+    llm_summary = llm.get("summary") if llm.get("status") == "ok" else rule_based_news_summary(card)
     return {
         "company": card.get("company"),
         "ticker": card.get("ticker"),
@@ -118,15 +116,49 @@ def extract_butterfly_path(card: dict) -> list[str]:
     for route in routes:
         path = route.get("path") or []
         if path:
-            return path[:5]
+            return complete_butterfly_path(path[:5], card)
     paths = card.get("impact_paths") or []
     if paths and isinstance(paths[0], str):
-        return paths[:5]
+        return complete_butterfly_path(paths[:5], card)
     issue_types = card.get("issue_types") or []
     company = card.get("company") or "해당 기업"
     if issue_types:
-        return [issue_types[0], "산업/회사 맥락 확인", f"{company} 영향 가능성 점검"]
-    return ["입력 이슈", "회사 관련성 확인", "가격/공시/수급 확인"]
+        return complete_butterfly_path([issue_types[0], "산업/회사 맥락 확인", f"{company} 영향 가능성 점검"], card)
+    return complete_butterfly_path(["입력 이슈", "회사 관련성 확인", "가격/공시/수급 확인"], card)
+
+
+def complete_butterfly_path(path: list[str], card: dict) -> list[str]:
+    company = card.get("company") or "해당 기업"
+    origin = card.get("canonical_origin") or "이슈"
+    defaults = [
+        "입력 이슈 발생",
+        f"{origin} 맥락으로 분류",
+        f"{company} 사업 노출도와 연결",
+        "가격·뉴스·공시 반응 관찰",
+        "추가 확인 데이터로 가설 검증",
+    ]
+    merged = list(path)
+    for item in defaults:
+        if len(merged) >= 5:
+            break
+        if item not in merged:
+            merged.append(item)
+    return merged[:5]
+
+
+def rule_based_news_summary(card: dict) -> str:
+    rss = card.get("rss_news", {})
+    items = rss.get("items", []) if rss.get("status") == "ok" else []
+    positives = len(card.get("positive_signals", []))
+    negatives = len(card.get("negative_signals", []))
+    direct = 0
+    for item in items:
+        signal = item.get("signal", {})
+        if signal.get("relevance") == "직접 관련":
+            direct += 1
+    if items:
+        return f"뉴스 제목 {len(items)}건을 기준으로 보면 직접 관련 후보 {direct}건이 잡혔고, 카드 내부 신호는 호재 {positives}개·악재/확인 {negatives}개로 나뉩니다. 원문과 공식 출처 확인이 필요합니다."
+    return f"뉴스 보조판단은 제한적입니다. 카드 내부 신호는 호재 {positives}개·악재/확인 {negatives}개로 나뉘며, 공식 출처와 가격 데이터를 함께 확인해야 합니다."
 
 
 def infer_context_sensitivity(card: dict) -> dict:
@@ -267,17 +299,17 @@ def price_window_table(summary: dict, body_style, font):
     from reportlab.lib.units import mm
     from reportlab.platypus import Paragraph, Table, TableStyle
     pre = summary.get("pre_reflection", {})
-    rows = [[Paragraph("구간", body_style), Paragraph("관찰값", body_style), Paragraph("해석", body_style)]]
+    rows = [[Paragraph("기준일 주변", body_style), Paragraph("그때 가격 변화", body_style), Paragraph("읽는 법", body_style)]]
     rows.append([
-        Paragraph("기준일 전", body_style),
+        Paragraph("비슷한 일이 발생하기 전", body_style),
         Paragraph(f"{pre.get('observation_label') or pre.get('label') or '없음'} / 점수 {pre.get('score')}", body_style),
-        Paragraph("원인 판정이 아니라 선행 가격 움직임 관찰", body_style),
+        Paragraph("그 전에 이미 움직였는지만 관찰", body_style),
     ])
     for label, key in [("+3영업일", "price_3d"), ("+5영업일", "price_5d"), ("+10영업일", "price_10d")]:
         rows.append([
             Paragraph(label, body_style),
             Paragraph(pct_text(summary.get(key, {})), body_style),
-            Paragraph("기준일 이후 참고 수익률", body_style),
+            Paragraph("그때는 이렇게 움직였다는 참고값", body_style),
         ])
     table = Table(rows, colWidths=[27*mm, 47*mm, 82*mm])
     table.setStyle(TableStyle([
@@ -420,11 +452,11 @@ def save_pdf(report: dict, output: Optional[str]) -> Path:
         ]))
         block.append(signal_table)
 
-        block.append(Paragraph("가격 움직임은 이렇게만 읽기", h3))
+        block.append(Paragraph("비슷한 일이 발생했던 기준일 주변 가격 참고", h3))
         pre = s.get("pre_reflection", {})
         block.append(price_window_table(s, body, font))
         if pre.get("caution"):
-            block.append(Paragraph(f"주의: {pre.get('caution')}", small))
+            block.append(Paragraph("주의: 이 표는 예측이 아니라 비슷한 기준일 주변에서 그때 가격이 어떻게 움직였는지 보여주는 참고값입니다.", small))
 
         block.append(Paragraph("왜 다르게 움직였을까?", h3))
         contradiction = s.get("market_contradiction", {})
@@ -452,12 +484,12 @@ def save_pdf(report: dict, output: Optional[str]) -> Path:
         else:
             block.append(Paragraph(contradiction.get("reason") or "가격 데이터가 부족해 불일치 후보를 만들지 않았습니다.", body))
 
-        block.append(Paragraph("AI/RSS 보조판단", h3))
-        block.append(Paragraph(truncate_text(s.get("llm_summary"), 260), body))
         if s.get("questions"):
             block.append(Paragraph("마지막 확인 질문", h3))
             block.append(Paragraph("; ".join(s["questions"]), small))
-        story.append(KeepTogether(block))
+        block.append(Paragraph("뉴스 보조판단", h3))
+        block.append(Paragraph(s.get("llm_summary") or "뉴스 보조판단 요약이 없습니다.", body))
+        story.extend(block)
 
     doc.build(story)
     return path

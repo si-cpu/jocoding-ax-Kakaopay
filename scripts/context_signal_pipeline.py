@@ -1078,7 +1078,7 @@ def extract_response_text(payload: dict) -> str:
     return "\n".join(parts).strip()
 
 
-def call_openai_structured(prompt: str, model: str, timeout: int = 45) -> dict:
+def call_openai_structured(prompt: str, model: str, timeout: int = 45, retries: int = 1) -> dict:
     load_local_env()
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -1105,14 +1105,21 @@ def call_openai_structured(prompt: str, model: str, timeout: int = 45) -> dict:
         },
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:500]
-        return {"status": "error", "reason": f"OpenAI API HTTP {exc.code}: {detail}"}
-    except Exception as exc:
-        return {"status": "error", "reason": str(exc)}
+    last_error = None
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout + attempt * 30) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:500]
+            last_error = f"OpenAI API HTTP {exc.code}: {detail}"
+            if 400 <= exc.code < 500 and exc.code != 429:
+                return {"status": "error", "reason": last_error, "attempts": attempt + 1}
+        except Exception as exc:
+            last_error = str(exc)
+    else:
+        return {"status": "error", "reason": last_error or "OpenAI API 호출 실패", "attempts": retries + 1}
 
     output_text = extract_response_text(payload)
     if not output_text:
@@ -1123,6 +1130,7 @@ def call_openai_structured(prompt: str, model: str, timeout: int = 45) -> dict:
         return {"status": "error", "reason": f"LLM JSON 파싱 실패: {exc}", "raw_text": output_text[:1000]}
     parsed["status"] = "ok"
     parsed["model"] = model
+    parsed["attempts"] = attempt + 1
     return parsed
 
 
@@ -1171,7 +1179,7 @@ def attach_llm_assessment(rss: dict, company: str, sentence: str, profile: dict,
         rss["llm_assessment"] = {"status": "skipped", "reason": "LLM으로 평가할 뉴스가 없습니다."}
         return rss
     prompt = build_llm_news_prompt(company, sentence, profile, items)
-    assessment = call_openai_structured(prompt, model)
+    assessment = call_openai_structured(prompt, model, retries=1)
     rss["llm_assessment"] = assessment
     if assessment.get("status") != "ok":
         return rss
