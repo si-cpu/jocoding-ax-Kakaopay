@@ -4,7 +4,9 @@
 
 ## 먼저 읽을 문서
 
-프로젝트의 출발점, 이름 변천, 최종 아키텍처, 검증 결과를 한 번에 보려면 [`PROJECT_EVOLUTION_SUMMARY.md`](PROJECT_EVOLUTION_SUMMARY.md)를 먼저 읽습니다.
+프로젝트의 출발점, 이름 변천, 최종 아키텍처, 검증 결과를 한 번에 보려면 [`docs/versions/v1_market_contradiction_assistant/PROJECT_EVOLUTION_SUMMARY.md`](docs/versions/v1_market_contradiction_assistant/PROJECT_EVOLUTION_SUMMARY.md)를 먼저 읽습니다.
+
+버전별 문서 구조는 [`docs/README.md`](docs/README.md)에 정리했습니다.
 
 ## 현재 제품 방향
 
@@ -230,7 +232,7 @@ AI를 사용해 문제 정의를 좁히고, 리스크를 식별하고, 앵커 �
 - 기준일 이후 3·5·10영업일 주가증감 계산
 - 플러그인 validation 통과
 
-검증 결과는 `OPENDART_HYUNDAI_STRIKE_REALDATA_RESULT.md`와 `PLUGIN_TEST_RESULTS.md`에 정리했습니다.
+검증 결과는 `docs/versions/v0_anchor_event_mapper/OPENDART_HYUNDAI_STRIKE_REALDATA_RESULT.md`와 `docs/versions/v0_anchor_event_mapper/PLUGIN_TEST_RESULTS.md`에 정리했습니다.
 
 ## 주의
 

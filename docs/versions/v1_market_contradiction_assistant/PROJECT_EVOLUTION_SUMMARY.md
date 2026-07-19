@@ -270,9 +270,10 @@ DART 포함 현실 테스트:
 
 ```text
 /Users/si/project/Checking_stock/new-chat/README.md
-/Users/si/project/Checking_stock/new-chat/SERVICE_PROJECT_CHARTER.md
-/Users/si/project/Checking_stock/new-chat/PIPELINE_EXPERIMENT.md
-/Users/si/project/Checking_stock/new-chat/PROJECT_EVOLUTION_SUMMARY.md
+/Users/si/project/Checking_stock/new-chat/docs/README.md
+/Users/si/project/Checking_stock/new-chat/docs/versions/v1_market_contradiction_assistant/SERVICE_PROJECT_CHARTER.md
+/Users/si/project/Checking_stock/new-chat/docs/versions/v1_market_contradiction_assistant/PIPELINE_EXPERIMENT.md
+/Users/si/project/Checking_stock/new-chat/docs/versions/v1_market_contradiction_assistant/PROJECT_EVOLUTION_SUMMARY.md
 ```
 
 주요 코드:
