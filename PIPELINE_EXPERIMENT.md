@@ -685,3 +685,49 @@ UI/UX 안전장치:
 1. 출발점 분류를 차터 taxonomy에 맞게 정규화
 2. `관련 낮음` 표현을 UI에서는 `5차 관찰 영향`으로 대체
 3. 파급 경로 seed를 코드에서 외부 JSON 설정으로 분리
+
+## 17. OpenDART 공식 이벤트 resolver v12
+
+문제:
+
+- 출발점 taxonomy는 문장 키워드만으로 추론하면 흔들린다.
+- 특히 수주, 생산중단, 시설투자, 배당, 자사주, 증자 같은 기업 직접 이벤트는 DART 공식 공시로 확인하는 편이 더 안전하다.
+
+구현:
+
+- `scripts/dart_event_resolver.py` 추가
+- 기존 `scripts/opendart_search.py`의 키 로딩, 회사코드 조회, 공시 목록 조회 함수 재사용
+- `context_signal_pipeline.py`에 `--dart` 옵션 추가
+- DART 매칭 시 카드에 다음 필드 추가
+  - `dart_event`
+  - `official_origin`
+  - `official_confirmation`
+  - `official_event_type`
+- DART 접수일을 기준일로 사용해 가격 참고를 재계산
+- 기준일이 주어지면 최신 공시가 아니라 기준일에 가장 가까운 공시를 lead로 선택
+
+검증:
+
+```bash
+python3 scripts/context_signal_pipeline.py \
+  --company 한화오션 \
+  --ticker 042660 \
+  --sentence "한화오션 LNG선 수주 공시가 났는데 후판 가격도 올랐대" \
+  --date 2024-02-22 \
+  --dart
+```
+
+결과:
+
+- DART 공식 이벤트: 수주/공급계약
+- 접수일: 2024-02-23
+- 보고서명: 단일판매ㆍ공급계약체결
+- 출발점: 기업 내부
+- 확인도: 공식 확인
+- 기준일 가격 참고가 DART 접수일 기준으로 재계산됨
+
+역할 정리:
+
+- DART는 전체 뉴스분류기가 아니다.
+- DART는 기업 직접 이벤트의 출발점/확인도 라벨을 공식 공시 기준으로 잠그는 resolver다.
+- 산업/정책/국제정세/거시/수급 이슈는 여전히 파급 경로 엔진과 뉴스/RSS/LLM 보조판단이 담당한다.

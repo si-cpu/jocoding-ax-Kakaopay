@@ -5,6 +5,7 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
+import importlib.util
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from dataclasses import dataclass, asdict
@@ -16,6 +17,10 @@ DEPENDENCY_HELP = """
 
 python3 -m pip install -r requirements-pipeline.txt
 """.strip()
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DART_RESOLVER_PATH = PROJECT_ROOT / "scripts" / "dart_event_resolver.py"
 
 
 @dataclass
@@ -821,6 +826,21 @@ def unique(values: list[str]) -> list[str]:
     return list(dict.fromkeys([value for value in values if value]))
 
 
+def load_dart_resolver():
+    spec = importlib.util.spec_from_file_location("dart_event_resolver", DART_RESOLVER_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def normalize_dart_date(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    if len(value) == 8 and value.isdigit():
+        return f"{value[:4]}-{value[4:6]}-{value[6:8]}"
+    return value
+
+
 def classify_news_item(title: str, company: str, sentence: str, profile: Optional[dict] = None) -> dict:
     title_text = title
     profile = profile or get_company_profile(company, None)
@@ -1330,7 +1350,20 @@ def match_rules(text: str):
     return matched
 
 
-def build_card(company: str, ticker: Optional[str], sentence: str, event_date: Optional[str] = None, include_rss: bool = False, rss_before: int = 3, rss_after: int = 10, use_llm: bool = False, llm_model: Optional[str] = None) -> dict:
+def build_card(
+    company: str,
+    ticker: Optional[str],
+    sentence: str,
+    event_date: Optional[str] = None,
+    include_rss: bool = False,
+    rss_before: int = 3,
+    rss_after: int = 10,
+    use_llm: bool = False,
+    llm_model: Optional[str] = None,
+    use_dart: bool = False,
+    dart_before: int = 30,
+    dart_after: int = 10,
+) -> dict:
     rules = match_rules(sentence)
     positive: list[Signal] = []
     negative: list[Signal] = []
@@ -1361,6 +1394,33 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
 
     company_profile = get_company_profile(company, ticker)
     input_issue_codes = detect_issue_codes(sentence)
+    dart_event = {"status": "skipped", "reason": "--dart 옵션이 꺼져 있습니다."}
+    if use_dart:
+        try:
+            dart_resolver = load_dart_resolver()
+            dart_event = dart_resolver.resolve_dart_event(
+                company,
+                ticker,
+                sentence,
+                event_date=event_date,
+                issue_codes=input_issue_codes,
+                before_days=dart_before,
+                after_days=dart_after,
+            )
+        except Exception as exc:
+            dart_event = {"status": "error", "reason": str(exc)}
+    if dart_event.get("status") == "official_match":
+        origins = [dart_event.get("origin", "기업 내부")] + origins
+        issue_types = [dart_event.get("official_event_type", "DART 공식 공시")] + issue_types
+        event_date = normalize_dart_date(dart_event.get("event_date")) or event_date
+        for signal in positive + negative:
+            if signal.confidence in ("공시 확인 필요", "공식 확인 필요", "뉴스 확인/공식 확인 필요"):
+                signal.confidence = "DART 공식 확인"
+        questions = list(dict.fromkeys([
+            "DART 공식 공시의 세부 조건과 규모를 확인했는가?",
+            "공시 이후 같은 기간의 추가 공시나 정정 공시가 있는가?",
+            "공시 내용이 실제 매출·비용·현금흐름에 미치는 시점은 언제인가?",
+        ] + questions))
     context_relevance_gate = issue_context_relevance_gate(input_issue_codes, company_profile, sentence)
     company_context_assessment = company_specific_assessment(input_issue_codes, company_profile)
     signal_balance = "혼합" if positive and negative else "호재 중심" if positive else "악재 중심" if negative else "확인 필요"
@@ -1399,6 +1459,9 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
         "input": sentence,
         "company_profile": company_profile,
         "input_issue_codes": input_issue_codes,
+        "dart_event": dart_event,
+        "official_origin": dart_event.get("origin") if dart_event.get("status") == "official_match" else None,
+        "official_confirmation": dart_event.get("confirmation") if dart_event.get("status") == "official_match" else None,
         "context_relevance_gate": context_relevance_gate,
         "company_context_assessment": company_context_assessment,
         "origins": list(dict.fromkeys(origins)),
@@ -1527,6 +1590,30 @@ def print_markdown(card: dict) -> None:
     print(f"- 신호 균형: {card['signal_balance']}")
     print()
 
+    dart_event = card.get("dart_event", {})
+    if dart_event:
+        print("## DART 공식 확인")
+        print()
+        status = dart_event.get("status")
+        if status == "official_match":
+            lead = dart_event.get("lead_disclosure", {})
+            print(f"- 상태: 공식 공시 매칭")
+            print(f"- 공식 이벤트: {dart_event.get('official_event_type')}")
+            print(f"- 접수일: {lead.get('rcept_dt')}")
+            print(f"- 보고서명: {lead.get('report_nm')}")
+            print(f"- DART 링크: {lead.get('dart_url')}")
+        elif status == "not_found":
+            print(f"- 상태: 공식 공시 미발견")
+            print(f"- 설명: {dart_event.get('reason')}")
+            print(f"- 후보 이벤트: {', '.join(dart_event.get('candidate_event_types', [])) or '없음'}")
+        elif status == "error":
+            print(f"- 상태: DART 확인 실패")
+            print(f"- 설명: {dart_event.get('reason')}")
+        else:
+            print(f"- 상태: 건너뜀")
+            print(f"- 설명: {dart_event.get('reason')}")
+        print()
+
     print("## 호재 신호")
     print()
     if card["positive_signals"]:
@@ -1643,10 +1730,26 @@ def main() -> None:
     parser.add_argument("--rss-after", type=int, default=10, help="RSS 검색 종료 범위: 기준일 후 N일")
     parser.add_argument("--llm", action="store_true", help="OpenAI API로 RSS 뉴스 보조판단을 붙입니다. OPENAI_API_KEY가 필요합니다.")
     parser.add_argument("--llm-model", default=None, help="LLM 보조판단에 사용할 모델입니다. 기본값은 OPENAI_MODEL 또는 gpt-5-mini입니다.")
+    parser.add_argument("--dart", action="store_true", help="OpenDART로 기업 직접 이벤트 공시를 공식 확인합니다. OPENDART_API_KEY가 필요합니다.")
+    parser.add_argument("--dart-before", type=int, default=30, help="DART 검색 시작 범위: 기준일 전 N일")
+    parser.add_argument("--dart-after", type=int, default=10, help="DART 검색 종료 범위: 기준일 후 N일")
     parser.add_argument("--json", action="store_true", help="JSON으로 출력합니다.")
     args = parser.parse_args()
 
-    card = build_card(args.company, args.ticker, args.sentence, args.date, args.rss, args.rss_before, args.rss_after, args.llm, args.llm_model)
+    card = build_card(
+        args.company,
+        args.ticker,
+        args.sentence,
+        args.date,
+        args.rss,
+        args.rss_before,
+        args.rss_after,
+        args.llm,
+        args.llm_model,
+        args.dart,
+        args.dart_before,
+        args.dart_after,
+    )
     if args.json:
         print(json.dumps(card, ensure_ascii=False, indent=2))
     else:
