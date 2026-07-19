@@ -22,6 +22,11 @@ opendart = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(opendart)
 
 
+_CORP_CODES_CACHE: Optional[List[Dict]] = None
+_CORP_CACHE: Dict[tuple, Dict] = {}
+_DISCLOSURE_CACHE: Dict[tuple, List[Dict]] = {}
+
+
 DART_EVENT_RULES = [
     {
         "event_type": "수주/공급계약",
@@ -180,9 +185,17 @@ def resolve_dart_event(
     opendart.load_env(env_path or str(PROJECT_ROOT / ".env"))
     api_key = opendart.require_key()
     bgn_de, end_de = date_window(event_date, before_days, after_days)
-    corps = opendart.load_corp_codes(api_key)
-    corp = opendart.find_corp(corps, stock_code=ticker, corp_name=company)
-    rows = opendart.fetch_disclosures(api_key, corp["corp_code"], bgn_de, end_de)
+    global _CORP_CODES_CACHE
+    if _CORP_CODES_CACHE is None:
+        _CORP_CODES_CACHE = opendart.load_corp_codes(api_key)
+    corp_key = (ticker or "", company or "")
+    if corp_key not in _CORP_CACHE:
+        _CORP_CACHE[corp_key] = opendart.find_corp(_CORP_CODES_CACHE, stock_code=ticker, corp_name=company)
+    corp = _CORP_CACHE[corp_key]
+    disclosure_key = (corp["corp_code"], bgn_de, end_de)
+    if disclosure_key not in _DISCLOSURE_CACHE:
+        _DISCLOSURE_CACHE[disclosure_key] = opendart.fetch_disclosures(api_key, corp["corp_code"], bgn_de, end_de)
+    rows = _DISCLOSURE_CACHE[disclosure_key]
     matches = sort_matches(match_disclosures(rows, candidate_rules), event_date)
     if not matches:
         return {

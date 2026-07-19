@@ -40,6 +40,7 @@ COMPANIES = [
 EVENT_SLOTS = [
     {
         "event": "HBM 수요 확대",
+        "date": "2025-04-04",
         "sentence": "{company} HBM 수요 확대 전망이 나왔는데 이미 주가가 많이 오른 상태야.",
         "origin": "산업",
         "direction_by_industry": {"반도체": "혼합 신호", "반도체/전자": "혼합 신호"},
@@ -52,6 +53,7 @@ EVENT_SLOTS = [
     },
     {
         "event": "파운드리 수율 개선",
+        "date": "2025-04-04",
         "sentence": "{company} 파운드리 수율 개선 보도가 나왔는데 TSMC 경쟁도 심해졌대.",
         "origin": "산업",
         "direction_by_industry": {"반도체/전자": "혼합 신호", "반도체": "불명확"},
@@ -64,6 +66,7 @@ EVENT_SLOTS = [
     },
     {
         "event": "오너 수사",
+        "date": "2024-07-23",
         "sentence": "{company} 오너 수사 보도가 회사 지배구조에 악재야?",
         "origin": "오너/지배구조",
         "direction_by_industry": {"플랫폼/인터넷": "악재 신호"},
@@ -76,6 +79,7 @@ EVENT_SLOTS = [
     },
     {
         "event": "LNG선 수주",
+        "date": "2024-02-22",
         "sentence": "{company} LNG선 수주 공시가 났는데 후판 가격도 올랐대.",
         "origin": "기업 내부",
         "direction_by_industry": {"조선": "혼합 신호"},
@@ -88,6 +92,7 @@ EVENT_SLOTS = [
     },
     {
         "event": "미국 전기차 보조금 축소",
+        "date": "2025-01-20",
         "sentence": "{company} 미국 전기차 보조금 축소 가능성이 수요에 어떤 신호야?",
         "origin": "정책",
         "direction_by_industry": {"배터리": "악재 신호", "자동차": "악재 신호"},
@@ -100,6 +105,7 @@ EVENT_SLOTS = [
     },
     {
         "event": "국제유가 상승",
+        "date": "2025-06-13",
         "sentence": "{company} 국제유가 급등 보도가 비용과 마진에 어떤 신호야?",
         "origin": "거시",
         "direction_by_industry": {"항공": "악재 신호", "정유": "혼합 신호", "자동차": "악재 신호"},
@@ -112,6 +118,7 @@ EVENT_SLOTS = [
     },
     {
         "event": "중국 희토류 수출통제",
+        "date": "2025-04-04",
         "sentence": "중국 희토류 수출통제 발표가 {company} 공급망에 직접 악재야?",
         "origin": "국제정세",
         "direction_by_industry": {"반도체": "악재 신호", "반도체/전자": "악재 신호", "배터리": "악재 신호", "자동차": "악재 신호"},
@@ -124,6 +131,7 @@ EVENT_SLOTS = [
     },
     {
         "event": "생산중단/파업",
+        "date": "2025-09-03",
         "sentence": "{company} 노조 파업 가능성 보도가 생산중단으로 이어질 수 있대.",
         "origin": "기업 내부",
         "direction_by_industry": {"자동차": "악재 신호", "조선": "악재 신호"},
@@ -136,6 +144,7 @@ EVENT_SLOTS = [
     },
     {
         "event": "플랫폼 규제 강화",
+        "date": "2024-07-23",
         "sentence": "{company} 플랫폼 규제 강화 전망이 광고와 커머스 사업에 부담이야?",
         "origin": "정책",
         "direction_by_industry": {"플랫폼/인터넷": "악재 신호"},
@@ -148,6 +157,7 @@ EVENT_SLOTS = [
     },
     {
         "event": "외국인 대량 순매도",
+        "date": "2025-04-04",
         "sentence": "{company} 외국인 대량 순매도와 공매도 증가가 단기 수급에 어떤 신호야?",
         "origin": "수급",
         "direction_by_industry": {},
@@ -229,6 +239,7 @@ def generate_labelset(limit: int = 200) -> List[Dict]:
                 "company": company["company"],
                 "ticker": company["ticker"],
                 "industry": company["industry"],
+                "date": slot.get("date"),
                 "sentence": sentence,
                 "slot_event": slot["event"],
                 "expected": {
@@ -272,6 +283,7 @@ def generate_labelset(limit: int = 200) -> List[Dict]:
             "company": company["company"],
             "ticker": company["ticker"],
             "industry": company["industry"],
+            "date": None,
             "sentence": template.format(company=company["company"]),
             "slot_event": "관련 낮음/노이즈",
             "expected": {
@@ -311,6 +323,8 @@ def normalize_direction(balance: str) -> str:
 
 
 def infer_confirmation(sentence: str, card: Dict) -> str:
+    if card.get("official_confirmation"):
+        return card["official_confirmation"]
     if any(word in sentence for word in ["루머", "커뮤니티", "친구", "대박", "무조건"]):
         return "루머/보류"
     if any(word in sentence for word in ["가능성", "전망", "예상", "이어질 수"]):
@@ -350,13 +364,23 @@ def contains_forbidden_recommendation(text: str) -> bool:
     return any(word in text for word in forbidden)
 
 
-def predict(case: Dict) -> Dict:
-    card = core.build_card(case["company"], case["ticker"], case["sentence"], event_date=None, include_rss=False, use_llm=False)
+def predict(case: Dict, use_dart: bool = False, dart_before: int = 30, dart_after: int = 10) -> Dict:
+    card = core.build_card(
+        case["company"],
+        case["ticker"],
+        case["sentence"],
+        event_date=case.get("date"),
+        include_rss=False,
+        use_llm=False,
+        use_dart=use_dart,
+        dart_before=dart_before,
+        dart_after=dart_after,
+    )
     serialized = json.dumps(card, ensure_ascii=False)
     gate = card.get("context_relevance_gate") or {}
     predicted_level = gate.get("impact_level", impact_level_from_distance(infer_impact_distance(card)))
     return {
-        "origin": normalize_origin(card.get("origins", [])),
+        "origin": normalize_origin([card.get("official_origin")] if card.get("official_origin") else card.get("origins", [])),
         "confirmation": infer_confirmation(case["sentence"], card),
         "direction": normalize_direction(card.get("signal_balance", "")),
         "impact_distance": infer_impact_distance(card),
@@ -368,6 +392,8 @@ def predict(case: Dict) -> Dict:
         "issue_types": card.get("issue_types", []),
         "questions_count": len(card.get("questions_to_check", [])),
         "guardrail": card.get("interpretation_guardrail"),
+        "dart_status": (card.get("dart_event") or {}).get("status"),
+        "official_event_type": (card.get("dart_event") or {}).get("official_event_type"),
     }
 
 
@@ -455,6 +481,12 @@ def summarize(results: List[Dict]) -> Dict:
             "total": len(observe_only),
             "accuracy": round(observe_only_ok / len(observe_only), 4) if observe_only else None,
         },
+        "dart": {
+            "official_match": sum(1 for item in results if item["prediction"].get("dart_status") == "official_match"),
+            "not_found": sum(1 for item in results if item["prediction"].get("dart_status") == "not_found"),
+            "skipped": sum(1 for item in results if item["prediction"].get("dart_status") == "skipped"),
+            "error": sum(1 for item in results if item["prediction"].get("dart_status") == "error"),
+        },
         "failure_counts": dict(sorted(failure_counts.items(), key=lambda item: (-item[1], item[0]))),
     }
 
@@ -499,6 +531,15 @@ def save_markdown(payload: Dict, path: Optional[str]) -> Path:
     lines += [
         f"| 관련 낮음 방어 | {guard['correct']} | {guard['total']} | {guard_accuracy} |",
         f"| 5차 관찰 전용 방어 | {observe_guard['correct']} | {observe_guard['total']} | {observe_guard_accuracy} |",
+        "",
+        "## DART 현실 확인",
+        "",
+        "| 상태 | 건수 |",
+        "|---|---:|",
+    ]
+    for status, count in summary.get("dart", {}).items():
+        lines.append(f"| {status} | {count} |")
+    lines += [
         "",
         "## 실패 유형",
         "",
@@ -574,6 +615,7 @@ def load_labelset(path: str) -> List[Dict]:
             "company": case["company"],
             "ticker": case.get("ticker"),
             "industry": case.get("industry", "미분류"),
+            "date": case.get("date"),
             "sentence": case["sentence"],
             "slot_event": case.get("slot_event") or case.get("event") or "사용자 정의",
             "expected": {
@@ -599,19 +641,22 @@ def save_template(path: str) -> Path:
     return output
 
 
-def run(limit: int, labelset_json: Optional[str] = None) -> Dict:
+def run(limit: int, labelset_json: Optional[str] = None, use_dart: bool = False, dart_before: int = 30, dart_after: int = 10) -> Dict:
     if labelset_json:
         cases = load_labelset(labelset_json)
         source = str(Path(labelset_json))
     else:
         cases = generate_labelset(limit)
         source = "built_in_starter_taxonomy"
-    results = [score_case(case, predict(case)) for case in cases]
+    results = [score_case(case, predict(case, use_dart=use_dart, dart_before=dart_before, dart_after=dart_after)) for case in cases]
     return {
         "status": "ok",
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "description": "RSS/LLM/API 없이 현재 context pipeline을 라벨셋에 태운 기준선 평가입니다.",
         "labelset_source": source,
+        "use_dart": use_dart,
+        "dart_before": dart_before,
+        "dart_after": dart_after,
         "cases": cases,
         "results": results,
         "summary": summarize(results),
@@ -630,6 +675,10 @@ def print_summary(payload: Dict, json_path: Path, md_path: Path) -> None:
     observe_guard = summary["observe_only_guard"]
     observe_guard_accuracy = f"{observe_guard['accuracy']:.1%}" if observe_guard["accuracy"] is not None else "N/A"
     print(f"- 5차 관찰 전용 방어: {observe_guard['correct']} / {observe_guard['total']} ({observe_guard_accuracy})")
+    if summary.get("dart"):
+        print("- DART:")
+        for status, count in summary["dart"].items():
+            print(f"  - {status}: {count}")
     print("- 실패 유형:")
     for failure, count in summary["failure_counts"].items():
         print(f"  - {failure}: {count}")
@@ -642,6 +691,9 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=200)
     parser.add_argument("--labelset-json", default=None, help="외부 라벨셋 JSON. 없으면 내장 starter taxonomy를 사용합니다.")
     parser.add_argument("--write-template", default=None, help="외부 라벨셋 작성용 JSON 템플릿만 저장하고 종료합니다.")
+    parser.add_argument("--use-dart", action="store_true", help="DART 공식 이벤트 resolver를 포함해 평가합니다.")
+    parser.add_argument("--dart-before", type=int, default=30)
+    parser.add_argument("--dart-after", type=int, default=10)
     parser.add_argument("--json-output", default=None)
     parser.add_argument("--md-output", default=None)
     parser.add_argument("--json", action="store_true")
@@ -650,7 +702,7 @@ def main() -> None:
         path = save_template(args.write_template)
         print(f"라벨셋 템플릿 저장: {path}")
         return
-    payload = run(args.limit, args.labelset_json)
+    payload = run(args.limit, args.labelset_json, args.use_dart, args.dart_before, args.dart_after)
     json_path = save_json(payload, args.json_output)
     md_path = save_markdown(payload, args.md_output)
     if args.json:

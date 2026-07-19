@@ -21,6 +21,7 @@ python3 -m pip install -r requirements-pipeline.txt
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DART_RESOLVER_PATH = PROJECT_ROOT / "scripts" / "dart_event_resolver.py"
+_DART_RESOLVER_MODULE = None
 
 
 @dataclass
@@ -827,9 +828,13 @@ def unique(values: list[str]) -> list[str]:
 
 
 def load_dart_resolver():
+    global _DART_RESOLVER_MODULE
+    if _DART_RESOLVER_MODULE is not None:
+        return _DART_RESOLVER_MODULE
     spec = importlib.util.spec_from_file_location("dart_event_resolver", DART_RESOLVER_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    _DART_RESOLVER_MODULE = module
     return module
 
 
@@ -1394,21 +1399,28 @@ def build_card(
 
     company_profile = get_company_profile(company, ticker)
     input_issue_codes = detect_issue_codes(sentence)
+    context_relevance_gate = issue_context_relevance_gate(input_issue_codes, company_profile, sentence)
     dart_event = {"status": "skipped", "reason": "--dart 옵션이 꺼져 있습니다."}
     if use_dart:
-        try:
-            dart_resolver = load_dart_resolver()
-            dart_event = dart_resolver.resolve_dart_event(
-                company,
-                ticker,
-                sentence,
-                event_date=event_date,
-                issue_codes=input_issue_codes,
-                before_days=dart_before,
-                after_days=dart_after,
-            )
-        except Exception as exc:
-            dart_event = {"status": "error", "reason": str(exc)}
+        if context_relevance_gate.get("direction_permission") == "observe_only":
+            dart_event = {
+                "status": "skipped",
+                "reason": "입력 이슈가 이 회사에는 5차 관찰 영향으로 분류되어 DART 공식 이벤트 잠금을 적용하지 않았습니다.",
+            }
+        else:
+            try:
+                dart_resolver = load_dart_resolver()
+                dart_event = dart_resolver.resolve_dart_event(
+                    company,
+                    ticker,
+                    sentence,
+                    event_date=event_date,
+                    issue_codes=input_issue_codes,
+                    before_days=dart_before,
+                    after_days=dart_after,
+                )
+            except Exception as exc:
+                dart_event = {"status": "error", "reason": str(exc)}
     if dart_event.get("status") == "official_match":
         origins = [dart_event.get("origin", "기업 내부")] + origins
         issue_types = [dart_event.get("official_event_type", "DART 공식 공시")] + issue_types
@@ -1421,7 +1433,6 @@ def build_card(
             "공시 이후 같은 기간의 추가 공시나 정정 공시가 있는가?",
             "공시 내용이 실제 매출·비용·현금흐름에 미치는 시점은 언제인가?",
         ] + questions))
-    context_relevance_gate = issue_context_relevance_gate(input_issue_codes, company_profile, sentence)
     company_context_assessment = company_specific_assessment(input_issue_codes, company_profile)
     signal_balance = "혼합" if positive and negative else "호재 중심" if positive else "악재 중심" if negative else "확인 필요"
     if context_relevance_gate.get("direction_permission") == "observe_only":
