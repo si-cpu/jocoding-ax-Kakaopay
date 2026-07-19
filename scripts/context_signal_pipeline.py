@@ -137,6 +137,73 @@ RULES = [
     },
 
     {
+        "keywords": ["HBM", "고대역폭메모리", "엔비디아", "NVIDIA", "AI 반도체", "AI 서버"],
+        "origin": "산업/섹터 + 고객사 밸류체인",
+        "issue_type": "HBM/AI 반도체 수요 신호",
+        "positive": [
+            ("AI 서버 메모리 수요 확대", "뉴스/데이터 확인 필요", "HBM 수요 증가는 메모리 업체의 고부가 제품 기대를 키울 수 있음"),
+            ("고객사 공급망 진입 기대", "확인 필요", "엔비디아 등 핵심 고객 공급 여부에 따라 기업별 영향이 크게 달라짐"),
+        ],
+        "negative": [
+            ("인증/점유율 미확인 리스크", "확인 필요", "수요가 커져도 해당 회사가 실제 물량을 확보했는지는 별도 확인이 필요함"),
+            ("경쟁사 점유율 확대 리스크", "뉴스 확인", "동일 업종 안에서도 누가 수혜를 가져가는지에 따라 방향이 갈릴 수 있음"),
+        ],
+        "questions": [
+            "해당 회사가 HBM 공급 인증 또는 양산 공급을 공식 확인했는가?",
+            "HBM 매출 비중과 이익 기여도가 어느 정도인가?",
+            "경쟁사 대비 점유율 변화가 확인되는가?",
+        ],
+    },
+    {
+        "keywords": ["메모리 가격", "D램", "DRAM", "낸드", "NAND", "메모리 업황"],
+        "origin": "산업/섹터",
+        "issue_type": "메모리 가격/업황 신호",
+        "positive": [
+            ("메모리 가격 상승 기대", "데이터 확인 필요", "메모리 가격 상승은 메모리 비중이 큰 회사의 매출/마진 기대에 긍정적일 수 있음"),
+        ],
+        "negative": [
+            ("업황 둔화/가격 하락 리스크", "데이터 확인 필요", "가격 하락이나 재고 증가는 메모리 업체 실적에 부담이 될 수 있음"),
+        ],
+        "questions": [
+            "DRAM/NAND 가격 지표가 실제로 개선 중인가?",
+            "재고 수준과 고객사 주문 흐름은 어떤가?",
+            "해당 회사의 메모리 매출/이익 비중은 어느 정도인가?",
+        ],
+    },
+    {
+        "keywords": ["파운드리", "수율", "위탁생산", "TSMC"],
+        "origin": "산업/경쟁구도",
+        "issue_type": "파운드리 경쟁/수율 신호",
+        "positive": [
+            ("수율 개선 기대", "확인 필요", "파운드리 수율 개선은 수주·마진 기대를 높일 수 있음"),
+        ],
+        "negative": [
+            ("경쟁 열위 리스크", "뉴스 확인", "TSMC 등 경쟁사 우위가 부각되면 파운드리 노출 기업에 부담이 될 수 있음"),
+        ],
+        "questions": [
+            "해당 회사가 파운드리 사업에 직접 노출되어 있는가?",
+            "수율 개선이 공식적으로 확인됐는가?",
+            "경쟁사 대비 고객 수주 흐름이 바뀌었는가?",
+        ],
+    },
+    {
+        "keywords": ["스마트폰", "갤럭시", "아이폰", "모바일", "휴대폰"],
+        "origin": "제품 수요/고객사 수요",
+        "issue_type": "스마트폰/모바일 수요 신호",
+        "positive": [
+            ("완제품/부품 수요 개선", "데이터 확인 필요", "스마트폰 판매 호조는 완제품 업체와 모바일 부품 공급망에 긍정적일 수 있음"),
+        ],
+        "negative": [
+            ("모바일 수요 둔화", "데이터 확인 필요", "스마트폰 판매 부진은 완제품과 모바일 부품 수요에 부담이 될 수 있음"),
+        ],
+        "questions": [
+            "해당 회사가 완제품 판매에 직접 노출되어 있는가, 부품 공급망에 간접 노출되어 있는가?",
+            "판매량/출하량 데이터가 실제로 확인되는가?",
+            "프리미엄/중저가 제품 믹스 변화가 있는가?",
+        ],
+    },
+
+    {
         "keywords": ["수주", "공급계약", "LNG선", "계약 체결", "대규모 계약"],
         "origin": "기업 내부",
         "issue_type": "수주/공급계약",
@@ -226,7 +293,49 @@ CHANNEL_KEYWORDS = {
 
 
 COMPANY_PROFILES = {
-    "005930": {"company": "삼성전자", "industry": "반도체/전자", "aliases": ["삼성전자", "삼성"], "exposures": ["반도체", "스마트폰", "수출", "환율", "공급망", "희토류", "AI"]},
+    "005930": {
+        "company": "삼성전자",
+        "industry": "반도체/전자",
+        "aliases": ["삼성전자", "삼성"],
+        "exposures": ["반도체", "스마트폰", "수출", "환율", "공급망", "희토류", "AI"],
+        "business_segments": {
+            "memory": "high",
+            "hbm": "medium_high",
+            "foundry": "medium_high",
+            "smartphone": "high",
+            "consumer_electronics": "medium",
+        },
+        "issue_sensitivity": {
+            "memory_price": "high",
+            "hbm_demand": "medium_high",
+            "foundry_yield": "high",
+            "smartphone_demand": "high",
+            "ai_server_demand": "medium_high",
+            "rare_earth_control": "medium",
+        },
+    },
+    "000660": {
+        "company": "SK하이닉스",
+        "industry": "반도체",
+        "aliases": ["SK하이닉스", "하이닉스", "SK hynix"],
+        "exposures": ["메모리", "DRAM", "NAND", "HBM", "AI", "엔비디아", "수출", "환율"],
+        "business_segments": {
+            "memory": "very_high",
+            "dram": "very_high",
+            "nand": "high",
+            "hbm": "very_high",
+            "foundry": "low",
+            "smartphone": "low",
+        },
+        "issue_sensitivity": {
+            "memory_price": "very_high",
+            "hbm_demand": "very_high",
+            "foundry_yield": "low",
+            "smartphone_demand": "medium_low",
+            "ai_server_demand": "very_high",
+            "rare_earth_control": "medium",
+        },
+    },
     "005380": {"company": "현대차", "industry": "자동차", "aliases": ["현대차", "현대자동차"], "exposures": ["자동차", "수출", "환율", "관세", "노사", "부품", "전기차"]},
     "003490": {"company": "대한항공", "industry": "항공", "aliases": ["대한항공"], "exposures": ["항공", "유가", "환율", "여객", "화물", "유류할증료"]},
     "010950": {"company": "S-Oil", "industry": "정유", "aliases": ["S-Oil", "에쓰오일", "에스오일"], "exposures": ["유가", "정제마진", "재고평가", "환율"]},
@@ -240,6 +349,10 @@ ISSUE_TYPE_KEYWORDS = {
     "subsidy_expand": ["보조금 확대", "지원금 증가", "세액공제 확대", "보조금", "AMPC"],
     "subsidy_cut": ["보조금 제외", "보조금 축소", "보조금 폐지", "IRA 축소", "제외", "폐지"],
     "rare_earth_control": ["희토류", "수출 제한", "수출통제", "수출 통제"],
+    "memory_price": ["메모리 가격", "D램 가격", "DRAM 가격", "낸드 가격", "NAND 가격", "메모리 업황", "D램", "DRAM", "낸드", "NAND"],
+    "hbm_demand": ["HBM", "고대역폭메모리", "엔비디아", "NVIDIA", "AI 반도체", "AI 서버"],
+    "foundry_yield": ["파운드리", "수율", "TSMC", "위탁생산"],
+    "smartphone_demand": ["스마트폰", "갤럭시", "아이폰", "모바일", "휴대폰"],
     "strike": ["파업", "노조", "임단협", "생산 차질", "생산중단"],
     "order_contract": ["수주", "공급계약", "LNG선", "계약", "인도"],
     "owner_legal": ["오너", "구속", "수사", "압수수색", "김범수", "법원"],
@@ -285,7 +398,8 @@ INDUSTRY_DIRECTION_RULES = {
 }
 
 INDUSTRY_KEYWORDS = {
-    "반도체/전자": ["반도체", "HBM", "메모리", "파운드리", "전자", "스마트폰", "TSMC", "마이크론"],
+    "반도체/전자": ["반도체", "HBM", "메모리", "D램", "DRAM", "낸드", "NAND", "파운드리", "전자", "스마트폰", "갤럭시", "TSMC", "마이크론", "엔비디아"],
+    "반도체": ["반도체", "HBM", "메모리", "D램", "DRAM", "낸드", "NAND", "AI 반도체", "엔비디아", "마이크론"],
     "자동차": ["자동차", "현대차", "기아", "전기차", "부품사", "완성차"],
     "항공": ["항공", "여객", "화물", "유류할증료", "공항"],
     "정유": ["정유", "정제마진", "원유", "석유"],
@@ -314,6 +428,10 @@ def detect_issue_codes(text: str) -> list[str]:
         "owner_legal",
         "strike",
         "rare_earth_control",
+        "hbm_demand",
+        "foundry_yield",
+        "smartphone_demand",
+        "memory_price",
         "oil_price_up",
         "order_contract",
         "subsidy_expand",
@@ -335,6 +453,72 @@ def industry_direction(issue_codes: list[str], industry: str) -> Optional[dict]:
             direction, reason = rules["default"]
             return {"issue_code": code, "direction": direction, "reason": reason, "source": "default_industry_rule"}
     return None
+
+
+SENSITIVITY_LABELS = {
+    "very_high": "매우 높음",
+    "high": "높음",
+    "medium_high": "중상",
+    "medium": "중간",
+    "medium_low": "중하",
+    "low": "낮음",
+}
+
+ISSUE_SEGMENT_HINTS = {
+    "memory_price": ["memory", "dram", "nand"],
+    "hbm_demand": ["hbm", "memory"],
+    "foundry_yield": ["foundry"],
+    "smartphone_demand": ["smartphone"],
+    "rare_earth_control": ["memory", "foundry", "smartphone"],
+}
+
+ISSUE_COMPANY_REASONS = {
+    "memory_price": "메모리 가격/업황 이슈는 메모리 매출·이익 비중이 높은 회사일수록 민감도가 커짐",
+    "hbm_demand": "HBM·AI 서버 수요 이슈는 HBM 노출도와 주요 고객 공급망 위치에 따라 민감도가 달라짐",
+    "foundry_yield": "파운드리 수율/경쟁 이슈는 파운드리 사업 노출이 큰 회사에 더 직접적임",
+    "smartphone_demand": "스마트폰 수요 이슈는 완제품 또는 모바일 부품 노출이 있는 회사에 더 직접적임",
+    "rare_earth_control": "희토류/공급망 통제 이슈는 직접 사용 여부와 사업부별 공급망 의존도 확인이 필요함",
+}
+
+
+def company_specific_assessment(issue_codes: list[str], profile: dict) -> Optional[dict]:
+    sensitivities = profile.get("issue_sensitivity", {})
+    segments = profile.get("business_segments", {})
+    matches = []
+    for code in issue_codes:
+        sensitivity = sensitivities.get(code)
+        if not sensitivity:
+            continue
+        segment_hits = []
+        for segment in ISSUE_SEGMENT_HINTS.get(code, []):
+            if segment in segments:
+                segment_hits.append({
+                    "segment": segment,
+                    "weight": segments[segment],
+                    "weight_label": SENSITIVITY_LABELS.get(segments[segment], segments[segment]),
+                })
+        matches.append({
+            "issue_code": code,
+            "sensitivity": sensitivity,
+            "sensitivity_label": SENSITIVITY_LABELS.get(sensitivity, sensitivity),
+            "reason": ISSUE_COMPANY_REASONS.get(code, "회사별 사업 포트폴리오 기준으로 민감도를 다르게 봅니다."),
+            "segment_hits": segment_hits,
+        })
+    if not matches:
+        return None
+    rank = {"very_high": 5, "high": 4, "medium_high": 3, "medium": 2, "medium_low": 1, "low": 0}
+    matches.sort(key=lambda item: rank.get(item["sensitivity"], -1), reverse=True)
+    lead = matches[0]
+    return {
+        "status": "ok",
+        "company": profile.get("company"),
+        "industry": profile.get("industry", "미분류"),
+        "lead_issue_code": lead["issue_code"],
+        "sensitivity": lead["sensitivity"],
+        "sensitivity_label": lead["sensitivity_label"],
+        "reason": lead["reason"],
+        "matches": matches,
+    }
 
 
 def assess_relevance(title: str, profile: dict) -> tuple[str, str]:
@@ -458,6 +642,7 @@ def classify_news_item(title: str, company: str, sentence: str, profile: Optiona
     relevance, relevance_reason = assess_relevance(title, profile)
     # 개별 RSS 제목에 이슈 키워드가 직접 잡힐 때만 산업별 방향 룰을 강하게 적용한다.
     # 입력 문장의 이슈를 모든 뉴스에 덮어씌우면 관련 없는 기사까지 같은 호재/악재로 오염된다.
+    company_assessment = company_specific_assessment(title_issue_codes or context_issue_codes, profile)
     override = industry_direction(title_issue_codes, profile.get("industry", "미분류"))
     if override and relevance != "관련 낮음":
         direction = override["direction"]
@@ -493,6 +678,7 @@ def classify_news_item(title: str, company: str, sentence: str, profile: Optiona
         "relevance_reason": relevance_reason,
         "industry": profile.get("industry", "미분류"),
         "industry_direction_rule": override,
+        "company_specific_assessment": company_assessment,
         "channels": unique(channels),
         "emotions": unique(emotions),
         "reason": direction_reason,
@@ -695,7 +881,7 @@ def fetch_daily_prices(ticker: Optional[str], event_date: str, before_days: int 
 
 def extract_query_terms(company: str, sentence: str) -> list[str]:
     terms = [company]
-    for keyword in ["희토류", "수출 제한", "공장증설", "실적쇼크", "파업", "생산 차질", "유가", "보조금", "수주", "LNG선", "오너", "수사", "순매도", "외국인"]:
+    for keyword in ["희토류", "수출 제한", "공장증설", "실적쇼크", "파업", "생산 차질", "유가", "보조금", "수주", "LNG선", "오너", "수사", "순매도", "외국인", "HBM", "엔비디아", "파운드리", "수율", "스마트폰", "갤럭시", "메모리", "D램", "DRAM", "낸드", "NAND"]:
         if keyword in sentence:
             terms.append(keyword)
     if len(terms) == 1:
@@ -797,6 +983,8 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
     signal_balance = "혼합" if positive and negative else "호재 중심" if positive else "악재 중심" if negative else "확인 필요"
 
     company_profile = get_company_profile(company, ticker)
+    input_issue_codes = detect_issue_codes(sentence)
+    company_context_assessment = company_specific_assessment(input_issue_codes, company_profile)
     price_reference = fetch_daily_prices(ticker, event_date) if event_date else {"status": "skipped", "reason": "기준일이 없어 가격 참고값을 계산하지 않았습니다."}
     rss_news = fetch_google_news_rss(company, sentence, event_date, before_days=rss_before, after_days=rss_after) if include_rss else {"status": "skipped", "reason": "--rss 옵션이 꺼져 있습니다."}
     rss_news = enrich_rss_news(rss_news, company, sentence, company_profile)
@@ -806,6 +994,8 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
         "ticker": ticker,
         "input": sentence,
         "company_profile": company_profile,
+        "input_issue_codes": input_issue_codes,
+        "company_context_assessment": company_context_assessment,
         "origins": list(dict.fromkeys(origins)),
         "issue_types": list(dict.fromkeys(issue_types)),
         "signal_balance": signal_balance,
@@ -851,6 +1041,9 @@ def print_analysis_layers(card: dict) -> None:
                 print(f"  - 감정/채널: {emotions} / {channels}")
                 if signal.get("industry_direction_rule"):
                     print(f"  - 산업별 방향 룰: {signal['industry_direction_rule']['reason']}")
+                if signal.get("company_specific_assessment"):
+                    assessment = signal["company_specific_assessment"]
+                    print(f"  - 기업별 2차 판단: 민감도 {assessment['sensitivity_label']} / {assessment['reason']}")
             print()
 
         print("## 이슈 감정")
@@ -908,6 +1101,13 @@ def print_markdown(card: dict) -> None:
     profile = card.get("company_profile", {})
     if profile:
         print(f"- 산업/노출도: {profile.get('industry', '미분류')} / {', '.join(profile.get('exposures', [])) or '노출도 미정'}")
+        segments = profile.get("business_segments", {})
+        if segments:
+            segment_text = ", ".join(f"{name}:{SENSITIVITY_LABELS.get(weight, weight)}" for name, weight in segments.items())
+            print(f"- 세부 사업 노출도: {segment_text}")
+    context_assessment = card.get("company_context_assessment")
+    if context_assessment:
+        print(f"- 기업별 2차 판단: {context_assessment['lead_issue_code']} 민감도 {context_assessment['sensitivity_label']} / {context_assessment['reason']}")
     print(f"- 입력 문장: {card['input']}")
     print(f"- 출발점: {', '.join(card['origins'])}")
     print(f"- 이슈 유형: {', '.join(card['issue_types'])}")
