@@ -135,6 +135,55 @@ RULES = [
             "이미 주가에 선반영된 기대는 없는가?",
         ],
     },
+
+    {
+        "keywords": ["수주", "공급계약", "LNG선", "계약 체결", "대규모 계약"],
+        "origin": "기업 내부",
+        "issue_type": "수주/공급계약",
+        "positive": [
+            ("수주잔고/매출 가시성 개선", "공시 확인 필요", "수주는 향후 매출과 일감 확보 기대를 만들 수 있음"),
+            ("업황 기대 강화", "뉴스 확인", "동종 수주 뉴스가 반복되면 업황 기대가 커질 수 있음"),
+        ],
+        "negative": [
+            ("수익성 확인 필요", "확인 필요", "계약 규모가 커도 선가·원가·납기 조건에 따라 이익 기여가 달라질 수 있음"),
+        ],
+        "questions": [
+            "공급계약 공시 또는 회사 공식 발표가 있는가?",
+            "계약 규모와 기존 매출 대비 비중은 어느 정도인가?",
+            "수익성, 납기, 원가 상승 조건은 확인됐는가?",
+        ],
+    },
+    {
+        "keywords": ["오너", "구속", "수사", "압수수색", "경영권", "대표 교체", "김범수"],
+        "origin": "기업 내부",
+        "issue_type": "지배구조/법률 리스크",
+        "positive": [],
+        "negative": [
+            ("경영 불확실성", "뉴스 확인/공식 확인 필요", "오너·경영진 수사 이슈는 의사결정과 투자심리에 부담이 될 수 있음"),
+            ("규제·법률 리스크", "확인 필요", "수사나 재판의 범위와 회사 직접 영향 여부를 확인해야 함"),
+        ],
+        "questions": [
+            "개인 이슈인지 회사 법인 리스크인지 구분됐는가?",
+            "공식 수사/법원 발표 또는 회사 공시가 있는가?",
+            "사업 운영, 인허가, 지배구조에 직접 영향이 있는가?",
+        ],
+    },
+    {
+        "keywords": ["외국인", "기관", "순매도", "순매수", "공매도", "보호예수", "MSCI", "지수 편입", "블록딜"],
+        "origin": "수급/시장구조",
+        "issue_type": "수급/시장구조 신호",
+        "positive": [
+            ("수급 개선 가능성", "데이터 확인 필요", "순매수·지수 편입 등은 단기 수급에 긍정적으로 작용할 수 있음"),
+        ],
+        "negative": [
+            ("수급 부담 가능성", "데이터 확인 필요", "순매도·공매도·보호예수 해제 등은 단기 수급 부담이 될 수 있음"),
+        ],
+        "questions": [
+            "거래소/수급 데이터로 실제 순매수·순매도 규모가 확인되는가?",
+            "일회성 거래인지 지속 흐름인지 확인했는가?",
+            "시장 전체 외국인 수급과 같은 방향인지 비교했는가?",
+        ],
+    },
 ]
 
 
@@ -174,6 +223,133 @@ CHANNEL_KEYWORDS = {
     "수급/심리": ["주가", "순매도", "순매수", "외국인", "기관", "거래량", "급등", "하락"],
     "업황/경쟁": ["경쟁", "업황", "경쟁사", "TSMC", "마이크론", "기아", "삼성중공업"],
 }
+
+
+COMPANY_PROFILES = {
+    "005930": {"company": "삼성전자", "industry": "반도체/전자", "aliases": ["삼성전자", "삼성"], "exposures": ["반도체", "스마트폰", "수출", "환율", "공급망", "희토류", "AI"]},
+    "005380": {"company": "현대차", "industry": "자동차", "aliases": ["현대차", "현대자동차"], "exposures": ["자동차", "수출", "환율", "관세", "노사", "부품", "전기차"]},
+    "003490": {"company": "대한항공", "industry": "항공", "aliases": ["대한항공"], "exposures": ["항공", "유가", "환율", "여객", "화물", "유류할증료"]},
+    "010950": {"company": "S-Oil", "industry": "정유", "aliases": ["S-Oil", "에쓰오일", "에스오일"], "exposures": ["유가", "정제마진", "재고평가", "환율"]},
+    "373220": {"company": "LG에너지솔루션", "industry": "배터리", "aliases": ["LG에너지솔루션", "LG엔솔"], "exposures": ["배터리", "전기차", "보조금", "IRA", "리튬", "설비투자"]},
+    "042660": {"company": "한화오션", "industry": "조선", "aliases": ["한화오션"], "exposures": ["조선", "LNG선", "수주", "선가", "방산", "환율", "후판"]},
+    "035720": {"company": "카카오", "industry": "플랫폼/인터넷", "aliases": ["카카오", "김범수"], "exposures": ["플랫폼", "광고", "커머스", "규제", "오너", "지배구조"]},
+}
+
+ISSUE_TYPE_KEYWORDS = {
+    "oil_price_up": ["유가", "유가 상승", "국제유가", "유가 급등", "원유", "브렌트", "WTI"],
+    "subsidy_expand": ["보조금 확대", "지원금 증가", "세액공제 확대", "보조금", "AMPC"],
+    "subsidy_cut": ["보조금 제외", "보조금 축소", "보조금 폐지", "IRA 축소", "제외", "폐지"],
+    "rare_earth_control": ["희토류", "수출 제한", "수출통제", "수출 통제"],
+    "strike": ["파업", "노조", "임단협", "생산 차질", "생산중단"],
+    "order_contract": ["수주", "공급계약", "LNG선", "계약", "인도"],
+    "owner_legal": ["오너", "구속", "수사", "압수수색", "김범수", "법원"],
+    "flow_sell": ["순매도", "대량 매도", "공매도", "보호예수", "블록딜"],
+    "flow_buy": ["순매수", "대량 매수", "지수 편입", "MSCI 편입"],
+}
+
+INDUSTRY_DIRECTION_RULES = {
+    "oil_price_up": {
+        "항공": ("악재 신호", "항공사는 유류비 비중이 커 유가 상승이 비용/마진 부담으로 작용할 수 있음"),
+        "정유": ("혼합 신호", "정유사는 재고평가 이익과 정제마진에는 긍정일 수 있으나 수요 둔화와 마진 변동을 함께 봐야 함"),
+        "자동차": ("악재 신호", "유가 상승은 소비심리와 운행비 부담을 통해 자동차 수요에 부담이 될 수 있음"),
+        "배터리": ("불명확", "유가 상승은 전기차 상대 매력에는 긍정일 수 있지만 원가/시장심리와 함께 봐야 함"),
+    },
+    "subsidy_expand": {
+        "배터리": ("호재 신호", "배터리 산업은 전기차 보조금·세액공제 확대가 수요와 투자비 부담 완화 기대로 이어질 수 있음"),
+        "자동차": ("호재 신호", "전기차 보조금 확대는 판매 수요에 긍정적으로 작용할 수 있음"),
+    },
+    "subsidy_cut": {
+        "배터리": ("악재 신호", "보조금 제외·축소·폐지는 전기차 수요와 배터리 업체 기대에 부담이 될 수 있음"),
+        "자동차": ("악재 신호", "보조금 제외·축소는 전기차 판매 조건에 부담이 될 수 있음"),
+    },
+    "rare_earth_control": {
+        "반도체/전자": ("악재 신호", "희토류 수출통제는 부품·장비 공급망과 원가 불확실성을 키울 수 있음"),
+        "배터리": ("악재 신호", "희토류·핵심광물 통제는 소재 조달 부담으로 이어질 수 있음"),
+        "자동차": ("악재 신호", "전기차 모터·부품 공급망 부담 가능성이 있음"),
+    },
+    "strike": {
+        "자동차": ("악재 신호", "완성차 생산 차질과 출고 지연 우려가 직접 발생할 수 있음"),
+    },
+    "order_contract": {
+        "조선": ("호재 신호", "조선사의 수주는 수주잔고와 향후 매출 가시성 개선으로 해석될 수 있음"),
+    },
+    "owner_legal": {
+        "플랫폼/인터넷": ("악재 신호", "오너·경영진 수사 이슈는 지배구조와 경영 불확실성, 규제 리스크로 해석될 수 있음"),
+    },
+    "flow_sell": {
+        "default": ("악재 신호", "대량 순매도·공매도·보호예수 해제는 단기 수급 부담 신호일 수 있음"),
+    },
+    "flow_buy": {
+        "default": ("호재 신호", "대량 순매수·지수 편입은 단기 수급 개선 신호일 수 있음"),
+    },
+}
+
+INDUSTRY_KEYWORDS = {
+    "반도체/전자": ["반도체", "HBM", "메모리", "파운드리", "전자", "스마트폰", "TSMC", "마이크론"],
+    "자동차": ["자동차", "현대차", "기아", "전기차", "부품사", "완성차"],
+    "항공": ["항공", "여객", "화물", "유류할증료", "공항"],
+    "정유": ["정유", "정제마진", "원유", "석유"],
+    "배터리": ["배터리", "전기차", "IRA", "AMPC", "리튬", "양극재"],
+    "조선": ["조선", "LNG선", "선박", "선가", "카타르", "삼성중공업", "HD현대중", "HD현대重"],
+    "플랫폼/인터넷": ["플랫폼", "카카오", "네이버", "오너", "김범수", "규제"],
+}
+
+
+def get_company_profile(company: str, ticker: Optional[str]) -> dict:
+    code = normalize_ticker_for_fdr(ticker) if ticker else None
+    if code and code in COMPANY_PROFILES:
+        return COMPANY_PROFILES[code]
+    for profile in COMPANY_PROFILES.values():
+        if company == profile["company"] or company in profile.get("aliases", []):
+            return profile
+    return {"company": company, "industry": "미분류", "aliases": [company], "exposures": []}
+
+
+def detect_issue_codes(text: str) -> list[str]:
+    # 더 구체적인 악재/축소 표현이 일반 정책 지원 표현보다 우선한다.
+    # 예: "보조금 폐지"는 보조금이라는 단어를 포함하지만 확대/수혜가 아니라 축소 리스크다.
+    priority = [
+        "subsidy_cut",
+        "flow_sell",
+        "owner_legal",
+        "strike",
+        "rare_earth_control",
+        "oil_price_up",
+        "order_contract",
+        "subsidy_expand",
+        "flow_buy",
+    ]
+    detected = [code for code in priority if contains_any(text, ISSUE_TYPE_KEYWORDS.get(code, []))]
+    if "subsidy_cut" in detected and "subsidy_expand" in detected:
+        detected.remove("subsidy_expand")
+    return detected
+
+
+def industry_direction(issue_codes: list[str], industry: str) -> Optional[dict]:
+    for code in issue_codes:
+        rules = INDUSTRY_DIRECTION_RULES.get(code, {})
+        if industry in rules:
+            direction, reason = rules[industry]
+            return {"issue_code": code, "direction": direction, "reason": reason, "source": "industry_rule"}
+        if "default" in rules:
+            direction, reason = rules["default"]
+            return {"issue_code": code, "direction": direction, "reason": reason, "source": "default_industry_rule"}
+    return None
+
+
+def assess_relevance(title: str, profile: dict) -> tuple[str, str]:
+    aliases = profile.get("aliases", [])
+    industry = profile.get("industry", "미분류")
+    exposures = profile.get("exposures", [])
+    if contains_any(title, aliases):
+        return "직접 관련", "회사명/별칭이 제목에 포함됨"
+    if industry != "미분류" and contains_any(title, INDUSTRY_KEYWORDS.get(industry, [])):
+        return "업종 관련", f"{industry} 관련 키워드가 제목에 포함됨"
+    if contains_any(title, exposures):
+        return "노출도 관련", "회사의 주요 노출 변수와 관련된 키워드가 제목에 포함됨"
+    if contains_any(title, ["중국", "미국", "중동", "관세", "유가", "금리", "환율", "보조금", "IRA", "수출통제", "수출 제한"]):
+        return "거시/정책 관련", "거시·정책 키워드가 제목에 포함됨"
+    return "관련 낮음", "회사·업종·노출도 키워드와 직접 연결이 약함"
 
 HISTORICAL_CASES = [
     {
@@ -231,6 +407,17 @@ HISTORICAL_CASES = [
         "price_note": "+10영업일 +3.68%",
         "context": ["수주 기대와 조선 업황 뉴스 동반", "경쟁사/선종 뉴스가 섞일 수 있음"],
     },
+    {
+        "case_id": "kakao_owner_legal_2024_07_23",
+        "company": "카카오",
+        "date": "2024-07-23",
+        "title": "오너 구속/지배구조 리스크",
+        "keywords": ["카카오", "김범수", "오너", "구속", "수사", "지배구조"],
+        "effect_levels": [0, 3, 4],
+        "emotions": ["충격", "불확실성", "공포"],
+        "price_note": "+10영업일 -2.19%",
+        "context": ["오너 개인 이슈와 회사 운영 리스크 구분 필요", "규제/플랫폼 업황 뉴스 동반 여부 확인 필요"],
+    },
 ]
 
 
@@ -243,68 +430,83 @@ def unique(values: list[str]) -> list[str]:
     return list(dict.fromkeys([value for value in values if value]))
 
 
-def classify_news_item(title: str, company: str, sentence: str) -> dict:
-    text = f"{title} {sentence}"
-    channels = [name for name, keywords in CHANNEL_KEYWORDS.items() if contains_any(text, keywords)]
-    emotions = [name for name, keywords in EMOTION_KEYWORDS.items() if contains_any(text, keywords)]
+def classify_news_item(title: str, company: str, sentence: str, profile: Optional[dict] = None) -> dict:
+    title_text = title
+    profile = profile or get_company_profile(company, None)
+    title_issue_codes = detect_issue_codes(title_text)
+    context_issue_codes = detect_issue_codes(sentence)
+    issue_codes = unique(title_issue_codes + context_issue_codes)
+    channels = [name for name, keywords in CHANNEL_KEYWORDS.items() if contains_any(title_text, keywords)]
+    emotions = [name for name, keywords in EMOTION_KEYWORDS.items() if contains_any(title_text, keywords)]
 
-    if contains_any(text, POSITIVE_KEYWORDS) and contains_any(text, NEGATIVE_KEYWORDS):
+    if contains_any(title_text, POSITIVE_KEYWORDS) and contains_any(title_text, NEGATIVE_KEYWORDS):
         direction = "혼합 신호"
-    elif contains_any(text, POSITIVE_KEYWORDS):
+    elif contains_any(title_text, POSITIVE_KEYWORDS):
         direction = "호재 신호"
-    elif contains_any(text, NEGATIVE_KEYWORDS):
+    elif contains_any(title_text, NEGATIVE_KEYWORDS):
         direction = "악재 신호"
     else:
         direction = "불명확"
 
-    if contains_any(text, CONFIRMED_KEYWORDS):
+    if contains_any(title_text, CONFIRMED_KEYWORDS):
         confidence = "뉴스 확인/공식 확인 필요"
-    elif contains_any(text, UNCERTAIN_KEYWORDS):
+    elif contains_any(title_text, UNCERTAIN_KEYWORDS):
         confidence = "예상/전망"
     else:
         confidence = "뉴스 확인"
 
-    if company and company in title:
-        relevance = "직접 관련"
-    elif contains_any(text, ["업계", "업종", "반도체", "배터리", "항공", "조선", "자동차"]):
-        relevance = "업종/공급망 관련"
-    elif contains_any(text, ["중국", "미국", "중동", "관세", "유가", "금리", "환율", "보조금", "IRA"]):
-        relevance = "거시/정책 관련"
+    relevance, relevance_reason = assess_relevance(title, profile)
+    # 개별 RSS 제목에 이슈 키워드가 직접 잡힐 때만 산업별 방향 룰을 강하게 적용한다.
+    # 입력 문장의 이슈를 모든 뉴스에 덮어씌우면 관련 없는 기사까지 같은 호재/악재로 오염된다.
+    override = industry_direction(title_issue_codes, profile.get("industry", "미분류"))
+    if override and relevance != "관련 낮음":
+        direction = override["direction"]
+        direction_reason = override["reason"]
     else:
-        relevance = "관련성 확인 필요"
+        context_override = industry_direction(context_issue_codes, profile.get("industry", "미분류"))
+        if context_override and relevance in ("직접 관련", "업종 관련", "노출도 관련"):
+            direction_reason = f"입력 이슈의 업종 룰 참고: {context_override['reason']}"
+        else:
+            direction_reason = "뉴스 제목의 키워드를 기준으로 한 1차 룰 기반 분류입니다."
 
     level = 4
-    if company and company in title and contains_any(text, ["파업", "구속", "수주", "공시", "발표", "생산중단", "보조금 제외", "적자전환"]):
+    if company and company in title and contains_any(title_text, ["파업", "구속", "수주", "공시", "발표", "생산중단", "보조금 제외", "적자전환"]):
         level = 0
-    if contains_any(text, ["생산 차질", "생산 중단", "생산중단", "유류할증료", "연료비", "원가", "마진", "실적", "적자", "수주"]):
+    if contains_any(title_text, ["생산 차질", "생산 중단", "생산중단", "유류할증료", "연료비", "원가", "마진", "실적", "적자", "수주"]):
         level = min(level, 1)
-    if contains_any(text, ["부품", "협력사", "그룹", "기아", "공급망", "반도체", "배터리", "방산", "경쟁", "업황"]):
+    if contains_any(title_text, ["부품", "협력사", "그룹", "기아", "공급망", "반도체", "배터리", "방산", "경쟁", "업황"]):
         level = min(level, 2)
-    if contains_any(text, ["중국", "미국", "중동", "관세", "수출통제", "수출 제한", "유가", "금리", "환율", "보조금", "IRA", "전쟁", "분쟁"]):
+    if contains_any(title_text, ["중국", "미국", "중동", "관세", "수출통제", "수출 제한", "유가", "금리", "환율", "보조금", "IRA", "전쟁", "분쟁"]):
         level = min(level, 3)
-    if contains_any(text, ["주가", "순매도", "순매수", "급등", "하락", "테마", "투자심리"]):
+    if contains_any(title_text, ["주가", "순매도", "순매수", "급등", "하락", "테마", "투자심리"]):
         level = 4
 
     return {
         "effect_level": level,
         "effect_label": EFFECT_LEVELS[level],
+        "issue_codes": issue_codes,
+        "title_issue_codes": title_issue_codes,
+        "context_issue_codes": context_issue_codes,
         "direction": direction,
         "confidence": confidence,
         "relevance": relevance,
+        "relevance_reason": relevance_reason,
+        "industry": profile.get("industry", "미분류"),
+        "industry_direction_rule": override,
         "channels": unique(channels),
         "emotions": unique(emotions),
-        "reason": "뉴스 제목의 키워드를 기준으로 한 1차 룰 기반 분류입니다.",
+        "reason": direction_reason,
     }
 
 
-def enrich_rss_news(rss: dict, company: str, sentence: str) -> dict:
+def enrich_rss_news(rss: dict, company: str, sentence: str, profile: Optional[dict] = None) -> dict:
     if rss.get("status") != "ok":
         return rss
     summary = {str(level): {"label": EFFECT_LEVELS[level], "count": 0, "items": []} for level in EFFECT_LEVELS}
     emotion_counts: dict[str, int] = {}
     direction_counts: dict[str, int] = {}
     for item in rss.get("items", []):
-        signal = classify_news_item(item.get("title", ""), company, sentence)
+        signal = classify_news_item(item.get("title", ""), company, sentence, profile)
         item["signal"] = signal
         level_key = str(signal["effect_level"])
         summary[level_key]["count"] += 1
@@ -493,7 +695,7 @@ def fetch_daily_prices(ticker: Optional[str], event_date: str, before_days: int 
 
 def extract_query_terms(company: str, sentence: str) -> list[str]:
     terms = [company]
-    for keyword in ["희토류", "수출 제한", "공장증설", "실적쇼크", "파업", "생산 차질", "유가", "보조금"]:
+    for keyword in ["희토류", "수출 제한", "공장증설", "실적쇼크", "파업", "생산 차질", "유가", "보조금", "수주", "LNG선", "오너", "수사", "순매도", "외국인"]:
         if keyword in sentence:
             terms.append(keyword)
     if len(terms) == 1:
@@ -594,14 +796,16 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
 
     signal_balance = "혼합" if positive and negative else "호재 중심" if positive else "악재 중심" if negative else "확인 필요"
 
+    company_profile = get_company_profile(company, ticker)
     price_reference = fetch_daily_prices(ticker, event_date) if event_date else {"status": "skipped", "reason": "기준일이 없어 가격 참고값을 계산하지 않았습니다."}
     rss_news = fetch_google_news_rss(company, sentence, event_date, before_days=rss_before, after_days=rss_after) if include_rss else {"status": "skipped", "reason": "--rss 옵션이 꺼져 있습니다."}
-    rss_news = enrich_rss_news(rss_news, company, sentence)
+    rss_news = enrich_rss_news(rss_news, company, sentence, company_profile)
 
     card = {
         "company": company,
         "ticker": ticker,
         "input": sentence,
+        "company_profile": company_profile,
         "origins": list(dict.fromkeys(origins)),
         "issue_types": list(dict.fromkeys(issue_types)),
         "signal_balance": signal_balance,
@@ -643,7 +847,10 @@ def print_analysis_layers(card: dict) -> None:
                 channels = ", ".join(signal.get("channels", [])) or "채널 확인 필요"
                 print(f"- {date_text}: {item.get('title', '')}")
                 print(f"  - 방향/확인도: {signal.get('direction')} / {signal.get('confidence')}")
+                print(f"  - 관련성: {signal.get('relevance')} ({signal.get('relevance_reason')})")
                 print(f"  - 감정/채널: {emotions} / {channels}")
+                if signal.get("industry_direction_rule"):
+                    print(f"  - 산업별 방향 룰: {signal['industry_direction_rule']['reason']}")
             print()
 
         print("## 이슈 감정")
@@ -698,6 +905,9 @@ def print_markdown(card: dict) -> None:
     print()
     if card.get("ticker"):
         print(f"- 종목코드: {card['ticker']}")
+    profile = card.get("company_profile", {})
+    if profile:
+        print(f"- 산업/노출도: {profile.get('industry', '미분류')} / {', '.join(profile.get('exposures', [])) or '노출도 미정'}")
     print(f"- 입력 문장: {card['input']}")
     print(f"- 출발점: {', '.join(card['origins'])}")
     print(f"- 이슈 유형: {', '.join(card['issue_types'])}")
