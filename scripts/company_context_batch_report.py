@@ -88,10 +88,13 @@ def summarize_card(card: dict) -> dict:
         "ticker": card.get("ticker"),
         "input": card.get("input"),
         "industry": card.get("company_profile", {}).get("industry", "미분류"),
+        "canonical_origin": card.get("canonical_origin") or ", ".join(card.get("origins", [])),
         "issue_types": card.get("issue_types", []),
         "signal_balance": card.get("signal_balance"),
         "company_sensitivity": assessment.get("sensitivity_label") or fallback_assessment.get("sensitivity_label") or "미분류",
         "company_issue_code": assessment.get("lead_issue_code") or fallback_assessment.get("lead_issue_code") or "미분류",
+        "dart_status": (card.get("dart_event") or {}).get("status"),
+        "dart_event_type": (card.get("dart_event") or {}).get("official_event_type"),
         "llm_status": llm.get("status"),
         "llm_summary": llm_summary,
         "direction_counts": llm_counts,
@@ -100,6 +103,7 @@ def summarize_card(card: dict) -> dict:
         "price_5d": offsets.get("5", {}),
         "price_10d": offsets.get("10", {}),
         "pre_reflection": card.get("pre_event_reflection", {}),
+        "market_contradiction": card.get("market_contradiction", {}),
         "questions": card.get("questions_to_check", [])[:4],
     }
 
@@ -124,7 +128,7 @@ def infer_context_sensitivity(card: dict) -> dict:
     return {}
 
 
-def run_cases(cases: list[dict], use_llm: bool, rss_before: int, rss_after: int) -> dict:
+def run_cases(cases: list[dict], use_llm: bool, use_dart: bool, rss_before: int, rss_after: int) -> dict:
     results = []
     for case in cases:
         card = core.build_card(
@@ -137,16 +141,18 @@ def run_cases(cases: list[dict], use_llm: bool, rss_before: int, rss_after: int)
             rss_after=rss_after,
             use_llm=use_llm,
             llm_model=None,
+            use_dart=use_dart,
         )
         results.append({"case": case, "summary": summarize_card(card), "card": card})
     return {
         "status": "ok",
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "use_llm": use_llm,
+        "use_dart": use_dart,
         "rss_before": rss_before,
         "rss_after": rss_after,
         "cases": results,
-        "guardrail": "투자 추천이나 가격 원인 단정이 아니라, 회사별 상황 신호와 확인 데이터 정리입니다.",
+        "guardrail": "투자 추천이나 가격 원인 단정이 아니라, 회사별 상황 신호와 뉴스-가격 불일치 설명 후보 정리입니다.",
     }
 
 
@@ -211,21 +217,23 @@ def save_pdf(report: dict, output: Optional[str]) -> Path:
     small = ParagraphStyle("SmallKo", parent=body, fontSize=7.6, leading=10.5, textColor=colors.HexColor("#555555"))
     doc = SimpleDocTemplate(str(path), pagesize=A4, rightMargin=14*mm, leftMargin=14*mm, topMargin=13*mm, bottomMargin=13*mm)
     story = []
-    story.append(Paragraph("5개 회사 상황 신호 비교 리포트", title))
-    story.append(Paragraph(f"생성시각: {report.get('generated_at')} | LLM 사용: {report.get('use_llm')} | RSS: -{report.get('rss_before')}일/+{report.get('rss_after')}일", small))
+    case_count = len(report.get("cases", []))
+    story.append(Paragraph(f"{case_count}개 기업 시장 불일치 해석 리포트", title))
+    story.append(Paragraph(f"생성시각: {report.get('generated_at')} | LLM 사용: {report.get('use_llm')} | DART 사용: {report.get('use_dart')} | RSS: -{report.get('rss_before')}일/+{report.get('rss_after')}일", small))
     story.append(Paragraph(report.get("guardrail", ""), small))
     story.append(Spacer(1, 8))
 
-    overview = [[Paragraph("회사", body), Paragraph("상황", body), Paragraph("신호/민감도", body), Paragraph("LLM 방향 카운트", body), Paragraph("+10영업일", body)]]
+    overview = [[Paragraph("회사", body), Paragraph("상황", body), Paragraph("출발점/신호", body), Paragraph("불일치 후보", body), Paragraph("+10영업일", body)]]
     for entry in report["cases"]:
         s = entry["summary"]
-        counts = s["direction_counts"]
-        count_text = " / ".join(f"{k}:{v}" for k, v in counts.items() if v)
+        contradiction = s.get("market_contradiction", {})
+        candidates = contradiction.get("candidates", []) if contradiction.get("status") == "ok" else []
+        candidate_text = "<br/>".join(f"- {c.get('label')}({c.get('confidence')})" for c in candidates[:2]) or contradiction.get("reason") or "없음"
         overview.append([
             Paragraph(f"{s['company']}<br/>{s['ticker']}", body),
             Paragraph(s["input"], body),
-            Paragraph(f"{s['signal_balance']}<br/>민감도 {s['company_sensitivity']}<br/>{', '.join(s['issue_types'])}", body),
-            Paragraph(count_text or "없음", body),
+            Paragraph(f"{s['canonical_origin']} / {s['signal_balance']}<br/>민감도 {s['company_sensitivity']}<br/>{', '.join(s['issue_types'])}", body),
+            Paragraph(candidate_text, body),
             Paragraph(pct_short(s["price_10d"]), body),
         ])
     table = Table(overview, colWidths=[24*mm, 61*mm, 38*mm, 42*mm, 25*mm], repeatRows=1)
@@ -247,11 +255,19 @@ def save_pdf(report: dict, output: Optional[str]) -> Path:
         s = entry["summary"]
         block = [Paragraph(f"{s['company']} - {entry['case']['label']}", h2)]
         block.append(Paragraph(f"<b>상황</b>: {s['input']}", body))
-        block.append(Paragraph(f"<b>산업/이슈</b>: {s['industry']} / {', '.join(s['issue_types'])}", body))
+        block.append(Paragraph(f"<b>출발점/산업/이슈</b>: {s['canonical_origin']} / {s['industry']} / {', '.join(s['issue_types'])}", body))
+        block.append(Paragraph(f"<b>DART</b>: {s.get('dart_status') or '없음'} {s.get('dart_event_type') or ''}", body))
         block.append(Paragraph(f"<b>LLM 요약</b>: {s.get('llm_summary') or '없음'}", body))
         pre = s.get("pre_reflection", {})
-        block.append(Paragraph(f"<b>선반영 가능성</b>: {pre.get('label')} (점수 {pre.get('score')})", body))
+        block.append(Paragraph(f"<b>선행 가격 움직임</b>: {pre.get('observation_label') or pre.get('label')} (점수 {pre.get('score')})", body))
         block.append(Paragraph(f"<b>가격 참고</b>: +3 {pct_text(s['price_3d'])}, +5 {pct_text(s['price_5d'])}, +10 {pct_text(s['price_10d'])}", body))
+        contradiction = s.get("market_contradiction", {})
+        if contradiction.get("status") == "ok":
+            candidates = contradiction.get("candidates", [])
+            candidate_text = "; ".join(f"{c.get('label')}({c.get('confidence')})" for c in candidates[:3]) or "없음"
+            block.append(Paragraph(f"<b>뉴스-가격 불일치</b>: {contradiction.get('alignment')} / {candidate_text}", body))
+        else:
+            block.append(Paragraph(f"<b>뉴스-가격 불일치</b>: {contradiction.get('reason') or '가격 데이터 부족'}", body))
         if s.get("questions"):
             block.append(Paragraph("<b>확인 질문</b>: " + "; ".join(s["questions"]), small))
         story.append(KeepTogether(block))
@@ -262,18 +278,23 @@ def save_pdf(report: dict, output: Optional[str]) -> Path:
 
 
 def print_summary(report: dict, json_path: Path, pdf_path: Path) -> None:
-    print("# 5개 회사 상황 신호 비교")
+    print(f"# {len(report.get('cases', []))}개 기업 시장 불일치 해석")
     print()
     for entry in report["cases"]:
         s = entry["summary"]
         print(f"## {s['company']} / {s['ticker']}")
         print(f"- 상황: {s['input']}")
-        print(f"- 이슈: {', '.join(s['issue_types'])}")
+        print(f"- 출발점/이슈: {s['canonical_origin']} / {', '.join(s['issue_types'])}")
         print(f"- 신호 균형: {s['signal_balance']} / 기업 민감도: {s['company_sensitivity']}")
+        print(f"- DART 상태: {s.get('dart_status')}")
         print(f"- LLM 상태: {s['llm_status']}")
         print(f"- LLM 요약: {s.get('llm_summary')}")
         print(f"- 방향 카운트: {s['direction_counts']}")
         print(f"- 가격 참고: +3 {pct_text(s['price_3d'])}, +5 {pct_text(s['price_5d'])}, +10 {pct_text(s['price_10d'])}")
+        contradiction = s.get("market_contradiction", {})
+        print(f"- 불일치 상태: {contradiction.get('alignment') or contradiction.get('status')}")
+        if contradiction.get("status") == "ok":
+            print(f"- 설명 후보: {[c.get('label') for c in contradiction.get('candidates', [])[:3]]}")
         print()
     print(f"JSON 저장: {json_path}")
     print(f"PDF 저장: {pdf_path}")
@@ -287,10 +308,11 @@ def refresh_report_summaries(report: dict) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="5개 회사 상황 신호 batch 리포트를 생성합니다.")
+    parser = argparse.ArgumentParser(description="여러 회사 상황 신호와 시장 불일치 해석 batch 리포트를 생성합니다.")
     parser.add_argument("--cases-json", default=None, help="사용자 정의 케이스 JSON 파일")
     parser.add_argument("--from-json", default=None, help="기존 결과 JSON으로 PDF/요약만 재생성")
     parser.add_argument("--no-llm", action="store_true")
+    parser.add_argument("--dart", action="store_true")
     parser.add_argument("--rss-before", type=int, default=3)
     parser.add_argument("--rss-after", type=int, default=10)
     parser.add_argument("--json-output", default=None)
@@ -306,7 +328,7 @@ def main() -> None:
         if args.cases_json:
             cases = json.loads(Path(args.cases_json).read_text(encoding="utf-8"))
         core.load_local_env(str(PROJECT_ROOT / ".env"))
-        report = run_cases(cases, use_llm=not args.no_llm, rss_before=args.rss_before, rss_after=args.rss_after)
+        report = run_cases(cases, use_llm=not args.no_llm, use_dart=args.dart, rss_before=args.rss_before, rss_after=args.rss_after)
     json_path = save_json(report, args.json_output)
     pdf_path = save_pdf(report, args.pdf_output)
     report["json_path"] = str(json_path)
