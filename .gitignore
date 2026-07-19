@@ -5,3 +5,5 @@
 .gitdb/
 __pycache__/
 *.pyc
+output/
+tmp/

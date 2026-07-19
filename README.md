@@ -237,3 +237,29 @@ python3 scripts/context_signal_pipeline.py \
 
 주의: 한 번 채팅이나 로그에 노출된 API 키는 폐기하고 새 키로 교체하는 것이 안전하다.
 
+## AI 상황 파급 지도 + PDF 리포트
+
+종목 하나의 호재/악재 뉴스 분류를 넘어, 하나의 상황이 어떤 산업과 종목군으로 번질 수 있는지 AI가 파급 지도를 생성한다. 결과는 JSON과 PDF로 저장된다.
+
+```bash
+python3 scripts/situation_impact_pipeline.py \
+  --situation "엔비디아 HBM 수요 확대가 한국 주식시장에 어떻게 번질까?" \
+  --date 2025-04-04 \
+  --max-candidates 6
+```
+
+출력물:
+
+- `output/situation/*.json`: 구조화된 상황 파급 지도
+- `output/pdf/*.pdf`: 가독성용 PDF 리포트
+
+저장된 JSON에서 PDF만 다시 만들 때는 API를 재호출하지 않는다.
+
+```bash
+python3 scripts/situation_impact_pipeline.py \
+  --from-json output/situation/example.json \
+  --pdf-output output/pdf/example.pdf
+```
+
+상황 지도는 투자 추천이나 가격 예측이 아니라, `상황 -> 영향 단계 -> 후보 산업/종목 -> 확인 데이터`를 정리하는 가설 지도다.
+
