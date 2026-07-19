@@ -25,8 +25,8 @@ class Signal:
 RULES = [
     {
         "keywords": ["공장증설", "증설", "신규 시설투자", "시설투자", "공장"],
-        "origin": "기업 내부 이벤트",
-        "event_type": "공장증설/신규 시설투자",
+        "origin": "기업 내부",
+        "issue_type": "공장증설/신규 시설투자",
         "positive": [
             ("생산능력 확대", "추론", "증설은 공급능력 확대 신호일 수 있음"),
             ("장기 매출 성장 기대", "확인 필요", "증설 제품의 수요가 충분하면 성장 신호가 될 수 있음"),
@@ -46,7 +46,7 @@ RULES = [
     {
         "keywords": ["실적쇼크", "어닝쇼크", "실적 쇼크", "실적 부진"],
         "origin": "재무/실적",
-        "event_type": "실적 쇼크/업황 둔화 신호",
+        "issue_type": "실적 쇼크/업황 둔화 신호",
         "positive": [],
         "negative": [
             ("업황 둔화 가능성", "예상/뉴스 확인", "경쟁사 실적쇼크는 같은 업종 수요 둔화 신호일 수 있음"),
@@ -61,7 +61,7 @@ RULES = [
     {
         "keywords": ["희토류", "수출 제한", "수출통제", "수출 통제"],
         "origin": "국제정세/지정학 + 원자재/공급망",
-        "event_type": "원자재 공급망 제한",
+        "issue_type": "원자재 공급망 제한",
         "positive": [
             ("대체 소재/공급망 다변화 기업 관심", "확인 필요", "공급망 재편 과정에서 일부 기업은 관심을 받을 수 있음"),
         ],
@@ -85,8 +85,8 @@ RULES = [
     },
     {
         "keywords": ["파업", "임단협", "노조", "생산 차질", "생산차질"],
-        "origin": "기업 내부 이벤트",
-        "event_type": "비확정 선행 신호 / 생산중단 후보",
+        "origin": "기업 내부",
+        "issue_type": "비확정 선행 신호 / 생산중단 후보",
         "positive": [
             ("타결/생산재개 가능성", "확인 필요", "노사 이슈는 합의나 철회로 끝날 수도 있음"),
         ],
@@ -103,7 +103,7 @@ RULES = [
     {
         "keywords": ["유가", "국제유가", "원유", "WTI", "브렌트"],
         "origin": "거시경제/원자재",
-        "event_type": "에너지 비용 신호",
+        "issue_type": "에너지 비용 신호",
         "positive": [
             ("유류할증료/가격 전가 가능성", "확인 필요", "일부 업종은 비용 상승분을 가격에 반영할 수 있음"),
         ],
@@ -120,7 +120,7 @@ RULES = [
     {
         "keywords": ["보조금", "지원금", "세액공제", "IRA", "국가전략", "지원 정책"],
         "origin": "정책/규제/국가전략",
-        "event_type": "정책 지원 신호",
+        "issue_type": "정책 지원 신호",
         "positive": [
             ("수요 확대 가능성", "공식 확인 필요", "보조금은 소비자 또는 고객사의 구매 여력을 높일 수 있음"),
             ("투자비 부담 완화", "공식 확인 필요", "세액공제나 보조금은 CAPEX 부담을 낮출 수 있음"),
@@ -291,12 +291,12 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
     negative: list[Signal] = []
     questions: list[str] = []
     origins = []
-    event_types = []
+    issue_types = []
     paths = []
 
     for rule in rules:
         origins.append(rule["origin"])
-        event_types.append(rule["event_type"])
+        issue_types.append(rule["issue_type"])
         for name, confidence, reason in rule.get("positive", []):
             positive.append(Signal(name, "호재 신호", confidence, reason))
         for name, confidence, reason in rule.get("negative", []):
@@ -307,7 +307,7 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
 
     if not rules:
         origins = ["분류 불가/확인 필요"]
-        event_types = ["분석 보류"]
+        issue_types = ["분석 보류"]
         questions = [
             "이 문장이 공식 공시, 뉴스, 전망, 루머 중 어디에서 나온 것인가?",
             "회사명과 구체적인 사건 유형이 명확한가?",
@@ -321,7 +321,7 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
         "ticker": ticker,
         "input": sentence,
         "origins": list(dict.fromkeys(origins)),
-        "event_types": list(dict.fromkeys(event_types)),
+        "issue_types": list(dict.fromkeys(issue_types)),
         "signal_balance": signal_balance,
         "positive_signals": [asdict(s) for s in positive],
         "negative_signals": [asdict(s) for s in negative],
@@ -329,7 +329,8 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
         "questions_to_check": list(dict.fromkeys(questions)),
         "price_reference": fetch_daily_prices(ticker, event_date) if event_date else {"status": "skipped", "reason": "기준일이 없어 가격 참고값을 계산하지 않았습니다."},
         "rss_news": fetch_google_news_rss(company, sentence, event_date, before_days=rss_before, after_days=rss_after) if include_rss else {"status": "skipped", "reason": "--rss 옵션이 꺼져 있습니다."},
-        "interpretation_guardrail": "이 결과는 호재/악재 결론이나 주가 원인 단정이 아니라, 판단 전에 확인할 신호 정리입니다.",
+        "analysis_frame": "anchorless_issue_context",
+        "interpretation_guardrail": "이 결과는 호재/악재 결론이나 주가 원인 단정이 아니라, 현재 이슈를 둘러싼 상황 신호 정리입니다.",
     }
 
 
@@ -340,7 +341,7 @@ def print_markdown(card: dict) -> None:
         print(f"- 종목코드: {card['ticker']}")
     print(f"- 입력 문장: {card['input']}")
     print(f"- 출발점: {', '.join(card['origins'])}")
-    print(f"- 이벤트 후보: {', '.join(card['event_types'])}")
+    print(f"- 이슈 유형: {', '.join(card['issue_types'])}")
     print(f"- 신호 균형: {card['signal_balance']}")
     print()
 
@@ -433,7 +434,7 @@ def print_markdown(card: dict) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="이슈 문장을 호재/악재 신호 카드로 분해합니다.")
+    parser = argparse.ArgumentParser(description="이슈 문장을 상황 신호 카드로 분해합니다.")
     parser.add_argument("--company", required=True)
     parser.add_argument("--ticker")
     parser.add_argument("--sentence", required=True)
