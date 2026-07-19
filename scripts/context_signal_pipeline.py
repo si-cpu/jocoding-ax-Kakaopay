@@ -145,6 +145,21 @@ RULES = [
             "이미 주가에 선반영된 기대는 없는가?",
         ],
     },
+    {
+        "keywords": ["플랫폼 규제", "플랫폼법", "온라인 플랫폼", "광고 규제", "커머스 규제"],
+        "origin": "정책/규제/국가전략",
+        "issue_type": "플랫폼 규제 신호",
+        "positive": [],
+        "negative": [
+            ("규제 비용/사업 확장성 부담", "뉴스/공식 확인 필요", "플랫폼 규제 강화는 광고·커머스·수수료 정책과 사업 확장성에 부담이 될 수 있음"),
+            ("정책 불확실성", "확인 필요", "법안 단계와 실제 시행 범위에 따라 영향이 달라질 수 있음"),
+        ],
+        "questions": [
+            "규제안이 법안 발의, 정부 발표, 실제 시행 중 어느 단계인가?",
+            "광고·커머스·수수료 등 어떤 사업부가 직접 대상인가?",
+            "동종 플랫폼 기업에도 같은 조건으로 적용되는가?",
+        ],
+    },
 
     {
         "keywords": ["HBM", "고대역폭메모리", "엔비디아", "NVIDIA", "AI 반도체", "AI 서버"],
@@ -371,6 +386,41 @@ ISSUE_TYPE_KEYWORDS = {
     "flow_buy": ["순매수", "대량 매수", "지수 편입", "MSCI 편입"],
 }
 
+CANONICAL_ORIGIN_BY_ISSUE_CODE = {
+    "order_contract": "기업 내부",
+    "strike": "기업 내부",
+    "owner_legal": "오너/지배구조",
+    "hbm_demand": "산업",
+    "foundry_yield": "산업",
+    "memory_price": "산업",
+    "smartphone_demand": "산업",
+    "subsidy_expand": "정책",
+    "subsidy_cut": "정책",
+    "platform_regulation": "정책",
+    "rare_earth_control": "국제정세",
+    "oil_price_up": "거시",
+    "flow_sell": "수급",
+    "flow_buy": "수급",
+}
+
+CANONICAL_ORIGIN_TEXT_MAP = {
+    "기업 내부": "기업 내부",
+    "재무/실적": "실적",
+    "실적": "실적",
+    "오너/지배구조": "오너/지배구조",
+    "산업/섹터 + 고객사 밸류체인": "산업",
+    "산업/섹터": "산업",
+    "산업/경쟁구도": "산업",
+    "제품 수요/고객사 수요": "산업",
+    "정책/규제/국가전략": "정책",
+    "국제정세/지정학 + 원자재/공급망": "국제정세",
+    "국제정세/지정학": "국제정세",
+    "거시경제/원자재": "거시",
+    "수급/시장구조": "수급",
+    "감성": "감성",
+    "분류 불가/확인 필요": "루머",
+}
+
 INDUSTRY_DIRECTION_RULES = {
     "oil_price_up": {
         "항공": ("악재 신호", "항공사는 유류비 비중이 커 유가 상승이 비용/마진 부담으로 작용할 수 있음"),
@@ -458,6 +508,28 @@ def detect_issue_codes(text: str) -> list[str]:
     if "subsidy_cut" in detected and "subsidy_expand" in detected:
         detected.remove("subsidy_expand")
     return detected
+
+
+def normalize_origin_text(origin: Optional[str]) -> str:
+    if not origin:
+        return "루머"
+    for needle, label in CANONICAL_ORIGIN_TEXT_MAP.items():
+        if needle in origin:
+            return label
+    return "루머"
+
+
+def canonical_origin(origins: list[str], issue_codes: list[str], official_origin: Optional[str] = None) -> str:
+    if official_origin:
+        return normalize_origin_text(official_origin)
+    for code in issue_codes:
+        if code in CANONICAL_ORIGIN_BY_ISSUE_CODE:
+            return CANONICAL_ORIGIN_BY_ISSUE_CODE[code]
+    for origin in origins:
+        label = normalize_origin_text(origin)
+        if label != "루머":
+            return label
+    return "루머"
 
 
 def industry_direction(issue_codes: list[str], industry: str) -> Optional[dict]:
@@ -1464,6 +1536,13 @@ def build_card(
     else:
         rss_news["llm_assessment"] = {"status": "skipped", "reason": "--llm 옵션이 꺼져 있습니다."}
 
+    raw_origins = list(dict.fromkeys(origins))
+    canonical_origin_value = canonical_origin(
+        raw_origins,
+        input_issue_codes,
+        dart_event.get("origin") if dart_event.get("status") == "official_match" else None,
+    )
+
     card = {
         "company": company,
         "ticker": ticker,
@@ -1475,7 +1554,9 @@ def build_card(
         "official_confirmation": dart_event.get("confirmation") if dart_event.get("status") == "official_match" else None,
         "context_relevance_gate": context_relevance_gate,
         "company_context_assessment": company_context_assessment,
-        "origins": list(dict.fromkeys(origins)),
+        "raw_origins": raw_origins,
+        "origins": [canonical_origin_value],
+        "canonical_origin": canonical_origin_value,
         "issue_types": list(dict.fromkeys(issue_types)),
         "signal_balance": signal_balance,
         "positive_signals": [asdict(s) for s in positive],

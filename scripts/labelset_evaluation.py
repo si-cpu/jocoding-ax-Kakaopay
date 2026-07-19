@@ -379,8 +379,11 @@ def predict(case: Dict, use_dart: bool = False, dart_before: int = 30, dart_afte
     serialized = json.dumps(card, ensure_ascii=False)
     gate = card.get("context_relevance_gate") or {}
     predicted_level = gate.get("impact_level", impact_level_from_distance(infer_impact_distance(card)))
+    predicted_origin = card.get("canonical_origin") or normalize_origin(
+        [card.get("official_origin")] if card.get("official_origin") else card.get("origins", [])
+    )
     return {
-        "origin": normalize_origin([card.get("official_origin")] if card.get("official_origin") else card.get("origins", [])),
+        "origin": predicted_origin,
         "confirmation": infer_confirmation(case["sentence"], card),
         "direction": normalize_direction(card.get("signal_balance", "")),
         "impact_distance": infer_impact_distance(card),
