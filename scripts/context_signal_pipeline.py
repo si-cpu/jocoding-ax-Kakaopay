@@ -138,6 +138,262 @@ RULES = [
 ]
 
 
+EFFECT_LEVELS = {
+    0: "0차 효과: 기준 사건",
+    1: "1차 효과: 직접 작용",
+    2: "2차 효과: 산업/공급망 파급",
+    3: "3차 효과: 외부환경 결합",
+    4: "4차 효과: 시장 반응/심리",
+}
+
+EMOTION_KEYWORDS = {
+    "공포": ["위기", "비상", "급락", "패닉", "붕괴", "손실", "빨간불", "차질", "중단", "공급난", "품귀", "흔들", "봉쇄"],
+    "불확실성": ["우려", "가능성", "전망", "불투명", "난항", "변수", "예의주시", "긴장", "통제"],
+    "실망": ["부진", "적자", "하회", "쇼크", "둔화", "제외", "축소"],
+    "피로감": ["장기화", "반복", "지연", "교착", "난항"],
+    "충격": ["구속", "압수수색", "사고", "화재", "리콜", "중단"],
+    "기대": ["수혜", "확대", "성장", "개선", "호조", "수주", "최대", "강세"],
+    "안도": ["타결", "재개", "해소", "완화", "승인", "합의", "정상화"],
+    "과열": ["급등", "폭등", "상한가", "테마", "몰림", "부각"],
+    "회복 기대": ["반등", "회복", "턴어라운드", "정상화"],
+    "관망": ["주시", "검토", "기다림", "관망", "예의주시"],
+}
+
+POSITIVE_KEYWORDS = ["수주", "공급계약", "승인", "흑자", "개선", "확대", "보조금", "수혜", "타결", "재개", "완화", "강세", "반등", "성장"]
+NEGATIVE_KEYWORDS = ["파업", "생산 차질", "생산중단", "적자", "쇼크", "구속", "압수수색", "규제", "제외", "유가 상승", "급등", "부담", "우려", "차질", "하락", "순매도", "중단", "통제", "공급난", "품귀", "흔들", "봉쇄", "긴장", "손실"]
+UNCERTAIN_KEYWORDS = ["우려", "가능성", "전망", "예상", "검토", "관측", "설", "루머", "불투명"]
+CONFIRMED_KEYWORDS = ["공시", "발표", "체결", "승인", "결정", "확정", "구속", "판결", "돌입", "중단"]
+
+CHANNEL_KEYWORDS = {
+    "생산": ["생산", "공장", "가동", "파업", "조업"],
+    "매출/계약": ["수주", "계약", "매출", "인도", "납품"],
+    "비용/마진": ["유가", "비용", "원가", "마진", "감가상각", "차입"],
+    "공급망": ["희토류", "공급망", "부품", "조달", "수출통제", "수출 제한"],
+    "정책/규제": ["보조금", "규제", "정책", "IRA", "세액공제", "관세"],
+    "지배구조/법률": ["오너", "구속", "수사", "압수수색", "경영권", "대표"],
+    "수급/심리": ["주가", "순매도", "순매수", "외국인", "기관", "거래량", "급등", "하락"],
+    "업황/경쟁": ["경쟁", "업황", "경쟁사", "TSMC", "마이크론", "기아", "삼성중공업"],
+}
+
+HISTORICAL_CASES = [
+    {
+        "case_id": "hyundai_strike_2025_09_03",
+        "company": "현대차",
+        "date": "2025-09-03",
+        "title": "현대차 파업/생산 차질",
+        "keywords": ["현대차", "파업", "생산 차질", "생산중단", "노조"],
+        "effect_levels": [0, 1, 3, 4],
+        "emotions": ["공포", "불확실성", "피로감"],
+        "price_note": "+10영업일 -2.48%",
+        "context": ["공식 생산중단 공시 확인", "부분파업", "관세/수출 일정 부담 뉴스 동반", "이후 생산재개/타결 확인 필요"],
+    },
+    {
+        "case_id": "samsung_rare_earth_2025_04",
+        "company": "삼성전자",
+        "date": "2025-04-04",
+        "title": "중국 희토류 수출 제한/반도체 공급망",
+        "keywords": ["삼성전자", "희토류", "수출 제한", "수출통제", "반도체", "공급망"],
+        "effect_levels": [2, 3, 4],
+        "emotions": ["불확실성", "공포", "관망"],
+        "price_note": "+10영업일 -1.43%",
+        "context": ["삼성전자 직접 사건은 아님", "공급망 간접 영향", "미중 관세/수출통제 맥락"],
+    },
+    {
+        "case_id": "korean_air_oil_2025_06",
+        "company": "대한항공",
+        "date": "2025-06-13",
+        "title": "유가 상승/항공 비용 부담",
+        "keywords": ["대한항공", "유가", "항공", "중동", "유류할증료"],
+        "effect_levels": [1, 3, 4],
+        "emotions": ["불확실성", "공포"],
+        "price_note": "+10영업일 +8.62%",
+        "context": ["유가 부담과 여행 수요/유류할증료를 함께 봐야 함", "중동 분쟁 뉴스 동반"],
+    },
+    {
+        "case_id": "lges_subsidy_2025_01",
+        "company": "LG에너지솔루션",
+        "date": "2025-01-20",
+        "title": "배터리 보조금/IRA 정책 변화",
+        "keywords": ["LG에너지솔루션", "LG엔솔", "보조금", "IRA", "배터리", "전기차"],
+        "effect_levels": [0, 1, 3, 4],
+        "emotions": ["기대", "불확실성", "실망"],
+        "price_note": "+10영업일 -9.31%",
+        "context": ["보조금 수혜 기대와 제외/축소 리스크가 공존", "실적/설비투자 뉴스 동반"],
+    },
+    {
+        "case_id": "hanwha_ocean_order_2024_02_22",
+        "company": "한화오션",
+        "date": "2024-02-22",
+        "title": "LNG선 수주/조선 업황",
+        "keywords": ["한화오션", "LNG선", "수주", "조선", "계약"],
+        "effect_levels": [0, 1, 2, 4],
+        "emotions": ["기대", "과열"],
+        "price_note": "+10영업일 +3.68%",
+        "context": ["수주 기대와 조선 업황 뉴스 동반", "경쟁사/선종 뉴스가 섞일 수 있음"],
+    },
+]
+
+
+def contains_any(text: str, keywords: list[str]) -> bool:
+    lowered = text.lower()
+    return any(keyword.lower() in lowered for keyword in keywords)
+
+
+def unique(values: list[str]) -> list[str]:
+    return list(dict.fromkeys([value for value in values if value]))
+
+
+def classify_news_item(title: str, company: str, sentence: str) -> dict:
+    text = f"{title} {sentence}"
+    channels = [name for name, keywords in CHANNEL_KEYWORDS.items() if contains_any(text, keywords)]
+    emotions = [name for name, keywords in EMOTION_KEYWORDS.items() if contains_any(text, keywords)]
+
+    if contains_any(text, POSITIVE_KEYWORDS) and contains_any(text, NEGATIVE_KEYWORDS):
+        direction = "혼합 신호"
+    elif contains_any(text, POSITIVE_KEYWORDS):
+        direction = "호재 신호"
+    elif contains_any(text, NEGATIVE_KEYWORDS):
+        direction = "악재 신호"
+    else:
+        direction = "불명확"
+
+    if contains_any(text, CONFIRMED_KEYWORDS):
+        confidence = "뉴스 확인/공식 확인 필요"
+    elif contains_any(text, UNCERTAIN_KEYWORDS):
+        confidence = "예상/전망"
+    else:
+        confidence = "뉴스 확인"
+
+    if company and company in title:
+        relevance = "직접 관련"
+    elif contains_any(text, ["업계", "업종", "반도체", "배터리", "항공", "조선", "자동차"]):
+        relevance = "업종/공급망 관련"
+    elif contains_any(text, ["중국", "미국", "중동", "관세", "유가", "금리", "환율", "보조금", "IRA"]):
+        relevance = "거시/정책 관련"
+    else:
+        relevance = "관련성 확인 필요"
+
+    level = 4
+    if company and company in title and contains_any(text, ["파업", "구속", "수주", "공시", "발표", "생산중단", "보조금 제외", "적자전환"]):
+        level = 0
+    if contains_any(text, ["생산 차질", "생산 중단", "생산중단", "유류할증료", "연료비", "원가", "마진", "실적", "적자", "수주"]):
+        level = min(level, 1)
+    if contains_any(text, ["부품", "협력사", "그룹", "기아", "공급망", "반도체", "배터리", "방산", "경쟁", "업황"]):
+        level = min(level, 2)
+    if contains_any(text, ["중국", "미국", "중동", "관세", "수출통제", "수출 제한", "유가", "금리", "환율", "보조금", "IRA", "전쟁", "분쟁"]):
+        level = min(level, 3)
+    if contains_any(text, ["주가", "순매도", "순매수", "급등", "하락", "테마", "투자심리"]):
+        level = 4
+
+    return {
+        "effect_level": level,
+        "effect_label": EFFECT_LEVELS[level],
+        "direction": direction,
+        "confidence": confidence,
+        "relevance": relevance,
+        "channels": unique(channels),
+        "emotions": unique(emotions),
+        "reason": "뉴스 제목의 키워드를 기준으로 한 1차 룰 기반 분류입니다.",
+    }
+
+
+def enrich_rss_news(rss: dict, company: str, sentence: str) -> dict:
+    if rss.get("status") != "ok":
+        return rss
+    summary = {str(level): {"label": EFFECT_LEVELS[level], "count": 0, "items": []} for level in EFFECT_LEVELS}
+    emotion_counts: dict[str, int] = {}
+    direction_counts: dict[str, int] = {}
+    for item in rss.get("items", []):
+        signal = classify_news_item(item.get("title", ""), company, sentence)
+        item["signal"] = signal
+        level_key = str(signal["effect_level"])
+        summary[level_key]["count"] += 1
+        summary[level_key]["items"].append(item)
+        direction_counts[signal["direction"]] = direction_counts.get(signal["direction"], 0) + 1
+        for emotion in signal.get("emotions", []):
+            emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
+    rss["effect_summary"] = summary
+    rss["emotion_counts"] = emotion_counts
+    rss["direction_counts"] = direction_counts
+    return rss
+
+
+def assess_pre_event_reflection(price: dict, rss: dict) -> dict:
+    score = 0
+    reasons = []
+    price_checks = []
+    if price.get("status") == "ok":
+        for key, threshold in (("10", 5.0), ("5", 3.0), ("3", 2.0)):
+            item = price.get("pre_event", {}).get(key, {})
+            if item and item.get("status") != "missing":
+                pct = item.get("change_pct", 0.0)
+                price_checks.append(item)
+                if abs(pct) >= threshold:
+                    score += 1
+                    direction = "상승" if pct > 0 else "하락"
+                    reasons.append(f"T-{key}~T-1 구간 주가 {direction} 폭이 {threshold:.0f}% 기준을 넘었습니다({pct:.2f}%).")
+    pre_items = rss.get("buckets", {}).get("pre_window", []) if rss.get("status") == "ok" else []
+    if len(pre_items) >= 3:
+        score += 1
+        reasons.append(f"기준일 전 관련 뉴스 후보가 {len(pre_items)}건입니다.")
+    emotional_pre = [item for item in pre_items if item.get("signal", {}).get("emotions")]
+    if len(emotional_pre) >= 2:
+        score += 1
+        reasons.append(f"기준일 전 감정 신호가 있는 뉴스가 {len(emotional_pre)}건입니다.")
+
+    if score >= 4:
+        label = "높음"
+    elif score >= 2:
+        label = "중간"
+    else:
+        label = "낮음"
+    return {
+        "score": score,
+        "label": label,
+        "price_checks": price_checks,
+        "pre_news_count": len(pre_items),
+        "pre_emotional_news_count": len(emotional_pre),
+        "reasons": reasons or ["기준일 전 가격/뉴스/감정 신호만으로는 선반영 가능성이 뚜렷하지 않습니다."],
+        "caution": "선반영은 확정 판정이 아니라 가능성 평가입니다. 다른 이슈로 인한 가격 변동일 수 있습니다.",
+    }
+
+
+def match_historical_case(company: str, sentence: str, card: dict) -> dict:
+    text = f"{company} {sentence}"
+    current_levels = set()
+    rss = card.get("rss_news", {})
+    if rss.get("status") == "ok":
+        current_levels = {item.get("signal", {}).get("effect_level") for item in rss.get("items", []) if item.get("signal")}
+        current_levels.discard(None)
+    current_emotions = set(rss.get("emotion_counts", {}).keys()) if rss.get("status") == "ok" else set()
+
+    candidates = []
+    for case in HISTORICAL_CASES:
+        keyword_hits = sum(1 for keyword in case["keywords"] if keyword.lower() in text.lower())
+        company_bonus = 2 if company and (company == case["company"] or company in case["keywords"]) else 0
+        level_overlap = len(current_levels.intersection(set(case["effect_levels"])))
+        emotion_overlap = len(current_emotions.intersection(set(case["emotions"])))
+        score = keyword_hits + company_bonus + level_overlap + emotion_overlap
+        if score > 0:
+            candidates.append((score, case))
+    if not candidates:
+        return {"status": "no_match", "reason": "현재 입력과 비교할 수 있는 내장 과거 사례가 아직 없습니다."}
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    score, case = candidates[0]
+    case_levels = set(case["effect_levels"])
+    return {
+        "status": "ok",
+        "score": score,
+        "case": case,
+        "common_effect_levels": sorted(current_levels.intersection(case_levels)),
+        "current_only_effect_levels": sorted(current_levels - case_levels),
+        "past_only_effect_levels": sorted(case_levels - current_levels),
+        "common_emotions": sorted(current_emotions.intersection(set(case["emotions"]))),
+        "current_only_emotions": sorted(current_emotions - set(case["emotions"])),
+        "comparison_warning": "과거 사례의 가격 반응을 현재에 그대로 대입하면 안 됩니다. 공통점보다 현재와 과거의 차이를 확인해야 합니다.",
+    }
+
+
 def normalize_ticker_for_fdr(ticker: Optional[str]) -> Optional[str]:
     if not ticker:
         return None
@@ -185,6 +441,27 @@ def fetch_daily_prices(ticker: Optional[str], event_date: str, before_days: int 
         return {"status": "error", "reason": "기준일 이후 거래일을 찾지 못했습니다."}
 
     base_row = rows[base_idx]
+    pre_event = {}
+    previous_idx = base_idx - 1
+    for n in (3, 5, 10):
+        start_idx = base_idx - n
+        if start_idx < 0 or previous_idx < 0:
+            pre_event[str(n)] = {"status": "missing"}
+            continue
+        start = rows[start_idx]
+        previous = rows[previous_idx]
+        change = previous["close"] - start["close"]
+        pct = change / start["close"] * 100 if start["close"] else 0
+        pre_event[str(n)] = {
+            "window": f"T-{n}~T-1",
+            "start_date": start["date"],
+            "end_date": previous["date"],
+            "start_close": start["close"],
+            "end_close": previous["close"],
+            "change": change,
+            "change_pct": pct,
+        }
+
     offsets = {}
     for n in (3, 5, 10):
         target_idx = base_idx + n
@@ -209,6 +486,7 @@ def fetch_daily_prices(ticker: Optional[str], event_date: str, before_days: int 
         "event_date": event_date,
         "base_date": base_row["date"],
         "base_close": base_row["close"],
+        "pre_event": pre_event,
         "offsets": offsets,
     }
 
@@ -316,7 +594,11 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
 
     signal_balance = "혼합" if positive and negative else "호재 중심" if positive else "악재 중심" if negative else "확인 필요"
 
-    return {
+    price_reference = fetch_daily_prices(ticker, event_date) if event_date else {"status": "skipped", "reason": "기준일이 없어 가격 참고값을 계산하지 않았습니다."}
+    rss_news = fetch_google_news_rss(company, sentence, event_date, before_days=rss_before, after_days=rss_after) if include_rss else {"status": "skipped", "reason": "--rss 옵션이 꺼져 있습니다."}
+    rss_news = enrich_rss_news(rss_news, company, sentence)
+
+    card = {
         "company": company,
         "ticker": ticker,
         "input": sentence,
@@ -327,11 +609,88 @@ def build_card(company: str, ticker: Optional[str], sentence: str, event_date: O
         "negative_signals": [asdict(s) for s in negative],
         "impact_paths": paths,
         "questions_to_check": list(dict.fromkeys(questions)),
-        "price_reference": fetch_daily_prices(ticker, event_date) if event_date else {"status": "skipped", "reason": "기준일이 없어 가격 참고값을 계산하지 않았습니다."},
-        "rss_news": fetch_google_news_rss(company, sentence, event_date, before_days=rss_before, after_days=rss_after) if include_rss else {"status": "skipped", "reason": "--rss 옵션이 꺼져 있습니다."},
-        "analysis_frame": "anchorless_issue_context",
+        "price_reference": price_reference,
+        "rss_news": rss_news,
+        "pre_event_reflection": assess_pre_event_reflection(price_reference, rss_news),
+        "analysis_frame": "anchorless_issue_context_v2",
         "interpretation_guardrail": "이 결과는 호재/악재 결론이나 주가 원인 단정이 아니라, 현재 이슈를 둘러싼 상황 신호 정리입니다.",
     }
+    card["historical_comparison"] = match_historical_case(company, sentence, card)
+    return card
+
+
+def format_level_list(levels: list[int]) -> str:
+    if not levels:
+        return "없음"
+    return ", ".join(EFFECT_LEVELS[level] for level in levels if level in EFFECT_LEVELS)
+
+
+def print_analysis_layers(card: dict) -> None:
+    rss = card.get("rss_news", {})
+    if rss.get("status") == "ok" and rss.get("effect_summary"):
+        print("## 나비효과 단계별 뉴스 신호")
+        print()
+        for level in range(5):
+            summary = rss["effect_summary"].get(str(level), {})
+            items = summary.get("items", [])
+            if not items:
+                continue
+            print(f"### {summary.get('label', EFFECT_LEVELS[level])}")
+            for item in items[:5]:
+                signal = item.get("signal", {})
+                date_text = item.get("published_date") or "날짜 없음"
+                emotions = ", ".join(signal.get("emotions", [])) or "감정 태그 없음"
+                channels = ", ".join(signal.get("channels", [])) or "채널 확인 필요"
+                print(f"- {date_text}: {item.get('title', '')}")
+                print(f"  - 방향/확인도: {signal.get('direction')} / {signal.get('confidence')}")
+                print(f"  - 감정/채널: {emotions} / {channels}")
+            print()
+
+        print("## 이슈 감정")
+        print()
+        emotion_counts = rss.get("emotion_counts", {})
+        if emotion_counts:
+            for emotion, count in sorted(emotion_counts.items(), key=lambda item: item[1], reverse=True):
+                print(f"- {emotion}: {count}건")
+        else:
+            print("- 뚜렷한 감정 태그를 찾지 못했습니다.")
+        print()
+
+    reflection = card.get("pre_event_reflection", {})
+    if reflection:
+        print("## 선반영 가능성")
+        print()
+        print(f"- 판정: {reflection.get('label')} (점수 {reflection.get('score')})")
+        for check in reflection.get("price_checks", []):
+            print(f"- {check['window']} 가격 변화: {check['change']:,.0f} / {check['change_pct']:.2f}% ({check['start_date']} → {check['end_date']})")
+        print(f"- 기준일 전 RSS 후보: {reflection.get('pre_news_count', 0)}건")
+        print(f"- 기준일 전 감정 뉴스: {reflection.get('pre_emotional_news_count', 0)}건")
+        for reason in reflection.get("reasons", []):
+            print(f"- {reason}")
+        print(f"- 주의: {reflection.get('caution')}")
+        print()
+
+    comparison = card.get("historical_comparison", {})
+    print("## 과거 유사 사례 비교")
+    print()
+    if comparison.get("status") == "ok":
+        case = comparison["case"]
+        print(f"- 유사 사례: {case['title']} ({case['date']}, {case['company']})")
+        print(f"- 과거 가격 참고: {case['price_note']}")
+        print(f"- 공통 나비효과 단계: {format_level_list(comparison.get('common_effect_levels', []))}")
+        print(f"- 현재에만 잡힌 단계: {format_level_list(comparison.get('current_only_effect_levels', []))}")
+        print(f"- 과거에만 기록된 단계: {format_level_list(comparison.get('past_only_effect_levels', []))}")
+        common_emotions = ", ".join(comparison.get("common_emotions", [])) or "없음"
+        current_only_emotions = ", ".join(comparison.get("current_only_emotions", [])) or "없음"
+        print(f"- 공통 감정: {common_emotions}")
+        print(f"- 현재 차별 감정: {current_only_emotions}")
+        print("- 과거 상황 메모:")
+        for ctx in case.get("context", []):
+            print(f"  - {ctx}")
+        print(f"- 주의: {comparison.get('comparison_warning')}")
+    else:
+        print(f"- {comparison.get('reason')}")
+    print()
 
 
 def print_markdown(card: dict) -> None:
@@ -421,6 +780,8 @@ def print_markdown(card: dict) -> None:
         if rss.get("help"):
             print(f"- 설치 안내: {rss['help']}")
         print()
+
+    print_analysis_layers(card)
 
     print("## 추가 확인 질문")
     print()
