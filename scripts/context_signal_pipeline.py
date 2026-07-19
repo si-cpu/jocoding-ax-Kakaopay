@@ -1214,11 +1214,180 @@ def assess_pre_event_reflection(price: dict, rss: dict) -> dict:
     return {
         "score": score,
         "label": label,
+        "observation_label": {"높음": "뚜렷함", "중간": "관찰됨", "낮음": "약함/없음"}.get(label, "약함/없음"),
         "price_checks": price_checks,
         "pre_news_count": len(pre_items),
         "pre_emotional_news_count": len(emotional_pre),
-        "reasons": reasons or ["기준일 전 가격/뉴스/감정 신호만으로는 선반영 가능성이 뚜렷하지 않습니다."],
-        "caution": "선반영은 확정 판정이 아니라 가능성 평가입니다. 다른 이슈로 인한 가격 변동일 수 있습니다.",
+        "reasons": reasons or ["기준일 전 가격/뉴스/감정 신호만으로는 선행 가격 움직임이 뚜렷하지 않습니다."],
+        "caution": "선행 가격 움직임은 원인 판정이 아니라 관찰값입니다. 다른 이슈로 인한 가격 변동일 수 있습니다.",
+    }
+
+
+def price_move_direction(change_pct: Optional[float], threshold: float = 2.0) -> str:
+    if change_pct is None:
+        return "unknown"
+    if change_pct >= threshold:
+        return "up"
+    if change_pct <= -threshold:
+        return "down"
+    return "flat"
+
+
+def expected_price_direction(signal_balance: str) -> str:
+    return {
+        "호재 중심": "up",
+        "악재 중심": "down",
+    }.get(signal_balance, "none")
+
+
+def find_primary_post_move(price: dict) -> dict:
+    if price.get("status") != "ok":
+        return {"status": "missing", "reason": "가격 참고값이 없어 기준일 이후 움직임을 비교하지 않았습니다."}
+    offsets = price.get("offsets", {})
+    for key in ("3", "5", "10"):
+        item = offsets.get(key, {})
+        if item and item.get("status") != "missing":
+            change_pct = item.get("change_pct")
+            return {
+                "status": "ok",
+                "window": f"T~T+{key}",
+                "date": item.get("date"),
+                "change": item.get("change"),
+                "change_pct": change_pct,
+                "direction": price_move_direction(change_pct),
+            }
+    return {"status": "missing", "reason": "기준일 이후 3·5·10영업일 가격 데이터를 찾지 못했습니다."}
+
+
+def find_primary_pre_move(price: dict) -> dict:
+    if price.get("status") != "ok":
+        return {"status": "missing", "reason": "가격 참고값이 없어 기준일 전 움직임을 비교하지 않았습니다."}
+    pre_event = price.get("pre_event", {})
+    for key in ("10", "5", "3"):
+        item = pre_event.get(key, {})
+        if item and item.get("status") != "missing":
+            change_pct = item.get("change_pct")
+            return {
+                "status": "ok",
+                "window": item.get("window", f"T-{key}~T-1"),
+                "start_date": item.get("start_date"),
+                "end_date": item.get("end_date"),
+                "change": item.get("change"),
+                "change_pct": change_pct,
+                "direction": price_move_direction(change_pct),
+            }
+    return {"status": "missing", "reason": "기준일 전 3·5·10영업일 가격 데이터를 찾지 못했습니다."}
+
+
+def build_candidate(kind: str, label: str, evidence: str, confidence: str, guardrail: str = "단일 원인으로 확정할 수 없습니다.") -> dict:
+    return {
+        "type": kind,
+        "label": label,
+        "evidence": evidence,
+        "confidence": confidence,
+        "guardrail": guardrail,
+    }
+
+
+def explain_market_contradiction(card: dict) -> dict:
+    price = card.get("price_reference", {})
+    expected = expected_price_direction(card.get("signal_balance", ""))
+    post = find_primary_post_move(price)
+    pre = find_primary_pre_move(price)
+    issue_codes = set(card.get("input_issue_codes", []))
+    positives = card.get("positive_signals", [])
+    negatives = card.get("negative_signals", [])
+    candidates = []
+
+    if post.get("status") != "ok":
+        return {
+            "status": "skipped",
+            "reason": post.get("reason"),
+            "guardrail": "뉴스 방향과 가격 움직임의 불일치는 가격 데이터가 있을 때만 관찰합니다.",
+        }
+
+    actual = post.get("direction")
+    if expected == "none":
+        alignment = "direction_not_asserted"
+    elif actual == "flat":
+        alignment = "muted_response"
+    elif expected == actual:
+        alignment = "aligned"
+    else:
+        alignment = "contradiction"
+
+    if alignment == "contradiction" and pre.get("status") == "ok":
+        pre_pct = pre.get("change_pct") or 0.0
+        if expected == "down" and actual == "up" and pre_pct <= -3.0:
+            candidates.append(build_candidate(
+                "prior_price_move",
+                "악재 선행 하락 후 반등 가능성",
+                f"{pre['window']} 가격 변화 {pre_pct:.2f}% 이후 {post['window']} {post['change_pct']:.2f}% 움직임",
+                "중간",
+                "악재가 먼저 반영됐다고 단정하지 말고, 같은 기간 다른 호재·시장 반등·수급을 함께 확인해야 합니다.",
+            ))
+        elif expected == "up" and actual == "down" and pre_pct >= 3.0:
+            candidates.append(build_candidate(
+                "prior_price_move",
+                "호재 선행 상승/차익실현 가능성",
+                f"{pre['window']} 가격 변화 +{pre_pct:.2f}% 이후 {post['window']} {post['change_pct']:.2f}% 움직임",
+                "중간",
+                "호재가 선반영됐다고 단정하지 말고, 실적 기대치·수급·시장 하락을 함께 확인해야 합니다.",
+            ))
+
+    if positives and negatives:
+        candidates.append(build_candidate(
+            "offsetting_signals",
+            "호재와 악재가 동시에 존재",
+            f"호재 신호 {len(positives)}개, 악재 신호 {len(negatives)}개가 함께 잡혔습니다.",
+            "중간",
+            "뉴스 개수보다 각 신호의 공식성·규모·시점을 우선 비교해야 합니다.",
+        ))
+
+    if issue_codes & {"flow_sell", "flow_buy"}:
+        candidates.append(build_candidate(
+            "flow_pressure",
+            "수급/포지셔닝 압력",
+            "입력 문장에서 순매도·순매수·공매도·지수 편입 같은 시장 구조 신호가 잡혔습니다.",
+            "낮음",
+            "수급은 기업 가치 원인이라기보다 가격 압력 또는 시장 반응층으로 분리해 봐야 합니다.",
+        ))
+
+    if alignment in {"contradiction", "muted_response"}:
+        candidates.append(build_candidate(
+            "expectation_gap",
+            "예상치와 실제의 차이",
+            "표면적으로 호재/악재여도 시장 기대보다 강하거나 약했는지 별도 확인이 필요합니다.",
+            "낮음",
+            "컨센서스, 가이던스, 직전 주가 기대를 확인하기 전에는 판단을 보류합니다.",
+        ))
+        candidates.append(build_candidate(
+            "market_or_sector_move",
+            "시장/업종 동반 움직임",
+            "종목 고유 이슈가 아니라 시장·업종 전체 반등/하락일 수 있습니다.",
+            "낮음",
+            "KOSPI/KOSDAQ, 업종지수, 주요 경쟁사 수익률과 비교해야 합니다.",
+        ))
+
+    if not candidates:
+        candidates.append(build_candidate(
+            "no_strong_contradiction",
+            "뚜렷한 불일치 후보 없음",
+            f"이슈 방향과 {post['window']} 가격 움직임이 크게 어긋난 신호는 약합니다.",
+            "낮음",
+            "가격 움직임의 원인을 단일 뉴스로 확정하지 않습니다.",
+        ))
+
+    return {
+        "status": "ok",
+        "news_direction": card.get("signal_balance"),
+        "expected_price_direction": expected,
+        "post_event_price_move": post,
+        "pre_event_price_move": pre,
+        "alignment": alignment,
+        "candidates": candidates,
+        "summary": "뉴스/이슈 방향과 가격 움직임이 어긋날 때 가능한 설명 후보를 정리합니다.",
+        "guardrail": "불일치 해석은 원인 확정이 아니라 후보 지도입니다.",
     }
 
 
@@ -1567,9 +1736,10 @@ def build_card(
         "rss_news": rss_news,
         "pre_event_reflection": assess_pre_event_reflection(price_reference, rss_news),
         "llm_model": selected_llm_model if use_llm else None,
-        "analysis_frame": "anchorless_issue_context_v3_llm_optional",
-        "interpretation_guardrail": "이 결과는 호재/악재 결론이나 주가 원인 단정이 아니라, 현재 이슈를 둘러싼 상황 신호 정리입니다.",
+        "analysis_frame": "market_contradiction_explainer_v1",
+        "interpretation_guardrail": "이 결과는 호재/악재 결론이나 주가 원인 단정이 아니라, 뉴스·공시·가격·수급이 어긋날 때 가능한 설명 후보를 정리한 것입니다.",
     }
+    card["market_contradiction"] = explain_market_contradiction(card)
     card["historical_comparison"] = match_historical_case(company, sentence, card)
     return card
 
@@ -1626,9 +1796,9 @@ def print_analysis_layers(card: dict) -> None:
 
     reflection = card.get("pre_event_reflection", {})
     if reflection:
-        print("## 선반영 가능성")
+        print("## 선행 가격 움직임 관찰")
         print()
-        print(f"- 판정: {reflection.get('label')} (점수 {reflection.get('score')})")
+        print(f"- 관찰 강도: {reflection.get('observation_label', reflection.get('label'))} (점수 {reflection.get('score')})")
         for check in reflection.get("price_checks", []):
             print(f"- {check['window']} 가격 변화: {check['change']:,.0f} / {check['change_pct']:.2f}% ({check['start_date']} → {check['end_date']})")
         print(f"- 기준일 전 RSS 후보: {reflection.get('pre_news_count', 0)}건")
@@ -1636,6 +1806,30 @@ def print_analysis_layers(card: dict) -> None:
         for reason in reflection.get("reasons", []):
             print(f"- {reason}")
         print(f"- 주의: {reflection.get('caution')}")
+        print()
+
+    contradiction = card.get("market_contradiction", {})
+    if contradiction:
+        print("## 뉴스-가격 불일치 설명 후보")
+        print()
+        if contradiction.get("status") == "ok":
+            post = contradiction.get("post_event_price_move", {})
+            pre = contradiction.get("pre_event_price_move", {})
+            print(f"- 뉴스/이슈 방향: {contradiction.get('news_direction')}")
+            print(f"- 정렬 상태: {contradiction.get('alignment')}")
+            print(f"- 기준일 이후 가격: {post.get('window')} / {post.get('change_pct', 0):.2f}%")
+            if pre.get("status") == "ok":
+                print(f"- 기준일 이전 가격: {pre.get('window')} / {pre.get('change_pct', 0):.2f}%")
+            print("- 설명 후보:")
+            for candidate in contradiction.get("candidates", []):
+                print(f"  - {candidate.get('label')} ({candidate.get('confidence')})")
+                print(f"    - 근거: {candidate.get('evidence')}")
+                print(f"    - 주의: {candidate.get('guardrail')}")
+            print(f"- 가드레일: {contradiction.get('guardrail')}")
+        else:
+            print(f"- 상태: 건너뜀")
+            print(f"- 설명: {contradiction.get('reason')}")
+            print(f"- 가드레일: {contradiction.get('guardrail')}")
         print()
 
     comparison = card.get("historical_comparison", {})
